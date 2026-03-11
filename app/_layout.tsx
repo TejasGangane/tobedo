@@ -1,42 +1,25 @@
-import { Stack } from "expo-router";
 import { ClerkProvider } from "@clerk/expo";
-import * as SecureStore from "expo-secure-store";
+import { tokenCache } from "@clerk/expo/token-cache";
+import * as WebBrowser from "expo-web-browser";
+import { Slot } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
-
-const tokenCache = {
-  async getToken(key: string) {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch (e) {
-      return null;
-    }
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (e) {
-      // no-op
-    }
-  },
-};
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-export default function RootLayout() {
-  if (!publishableKey) {
-    throw new Error(
-      "Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in your .env file.",
-    );
-  }
+if (!publishableKey) {
+  throw new Error(
+    "Add your Clerk Publishable Key to the .env file",
+  );
+}
 
+WebBrowser.maybeCompleteAuthSession();
+
+export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <KeyboardProvider>
-        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-          <Stack screenOptions={{ headerShown: false }} />
-        </ClerkProvider>
-      </KeyboardProvider>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <Slot />
+      </ClerkProvider>
     </GestureHandlerRootView>
   );
 }
