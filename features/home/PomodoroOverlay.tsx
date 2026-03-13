@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "stretch",
     paddingHorizontal: 24,
-    backgroundColor: Colors.backgroud,
+    backgroundColor: Colors.background,
   },
   header: {
     width: "100%",
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     right: 0,
     height: POMODORO_ITEM_HEIGHT,
     borderRadius: 12,
-    backgroundColor: Colors.backgroud,
+    backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.actionButtonStroke,
   },

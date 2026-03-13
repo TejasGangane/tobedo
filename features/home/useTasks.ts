@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/expo";
-import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 
 import type { Task } from "./types";
@@ -26,7 +26,7 @@ export function useTasks() {
 
     const loadTasks = async () => {
       try {
-        const stored = await SecureStore.getItemAsync(key);
+        const stored = await AsyncStorage.getItem(key);
         if (!stored) return;
         const parsed = JSON.parse(stored) as Task[] | unknown;
         if (Array.isArray(parsed)) {
@@ -53,10 +53,7 @@ export function useTasks() {
     const timeout = setTimeout(() => {
       const saveTasks = async () => {
         try {
-          await SecureStore.setItemAsync(
-            storageKey,
-            JSON.stringify(tasks),
-          );
+          await AsyncStorage.setItem(storageKey, JSON.stringify(tasks));
         } catch {
           // ignore write errors
         }
@@ -130,8 +127,12 @@ export function useTasks() {
         if (task) reordered.push(task);
       });
 
+      const remainingForDate = currentForDate.filter(
+        (t) => !orderedIds.includes(t.id),
+      );
+
       const others = prev.filter((t) => t.date !== date);
-      return [...others, ...reordered];
+      return [...others, ...reordered, ...remainingForDate];
     });
   };
 

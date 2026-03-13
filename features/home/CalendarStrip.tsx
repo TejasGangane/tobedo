@@ -26,7 +26,7 @@ type Props = {
 // Ensure exactly 7 day pills fit within the padded content width.
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const ROOT_HORIZONTAL_PADDING = 24; // matches HomeScreen root paddingHorizontal
-const CALENDAR_AVAILABLE_WIDTH = SCREEN_WIDTH - ROOT_HORIZONTAL_PADDING * -0.1;
+const CALENDAR_AVAILABLE_WIDTH = SCREEN_WIDTH - ROOT_HORIZONTAL_PADDING * 2;
 const DAYS_VISIBLE = 7;
 const DAY_TOTAL_WIDTH = CALENDAR_AVAILABLE_WIDTH / DAYS_VISIBLE;
 const DAY_ITEM_WIDTH = DAY_TOTAL_WIDTH; // slightly wider pill for each day

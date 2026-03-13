@@ -32,15 +32,6 @@ import { useTasksContext } from "./TasksContext";
 import type { PomodoroState, Task } from "./types";
 
 const DEFAULT_POMODORO_MINUTES = 30;
-const COMPLETION_CONFETTI_COUNT = 14;
-const COMPLETION_CONFETTI_COLORS = [
-  "#F97316",
-  "#10B981",
-  "#3B82F6",
-  "#EC4899",
-  "#FACC15",
-  "#22C55E",
-];
 const initialToday = formatDateKey(new Date());
 
 export default function HomeScreen() {
@@ -205,9 +196,7 @@ export default function HomeScreen() {
   };
 
   const activeTaskTitle =
-    pomodoro.mode === "focus" ||
-      pomodoro.mode === "ready" ||
-      pomodoro.mode === "completed"
+    pomodoro.mode === "focus" || pomodoro.mode === "ready"
       ? tasks.find((t) => t.id === pomodoro.taskId)?.title
       : undefined;
 
@@ -368,43 +357,6 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {pomodoro.mode === "completed" && (
-            <View pointerEvents="none" style={styles.completionOverlay}>
-              <Animated.View
-                entering={FadeInDown.duration(450)}
-                exiting={FadeInDown.duration(300)}
-                style={styles.completionContent}
-                layout={Layout.springify()}
-              >
-                <View style={styles.completionCircle}>
-                  <FontAwesome name="check" size={30} color="#FFFFFF" />
-                </View>
-                <View style={styles.completionConfettiLayer}>
-                  {Array.from({ length: COMPLETION_CONFETTI_COUNT }).map(
-                    (_, index) => {
-                      const color =
-                        COMPLETION_CONFETTI_COLORS[
-                        index % COMPLETION_CONFETTI_COLORS.length
-                        ];
-                      return (
-                        <Animated.View
-                          // eslint-disable-next-line react/no-array-index-key
-                          key={index}
-                          entering={FadeInDown.delay(index * 30)
-                            .duration(500)
-                            .easing(Easing.out(Easing.cubic))}
-                          style={[
-                            styles.completionConfettiPiece,
-                            { backgroundColor: color },
-                          ]}
-                        />
-                      );
-                    },
-                  )}
-                </View>
-              </Animated.View>
-            </View>
-          )}
         </View>
       </KeyboardAvoidingView>
       <CalendarModal
@@ -465,7 +417,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.backgroud,
+    backgroundColor: Colors.background,
   },
   root: {
     flex: 1,
@@ -668,38 +620,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Colors.highlightText,
-  },
-  completionOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  completionContent: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  completionCircle: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: Colors.backgroud,
-    borderWidth: 4,
-    borderColor: Colors.highlightText,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  completionConfettiLayer: {
-    position: "absolute",
-    width: 140,
-    height: 140,
-  },
-  completionConfettiPiece: {
-    position: "absolute",
-    width: 6,
-    height: 10,
-    borderRadius: 3,
-    opacity: 0.9,
   },
   addModalBackdrop: {
     flex: 1,

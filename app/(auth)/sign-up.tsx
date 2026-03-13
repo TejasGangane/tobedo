@@ -12,13 +12,17 @@ import {
 } from "react-native";
 
 export default function SignUpPage() {
-  const { signUp, errors, fetchStatus } = useSignUp();
+  const { isLoaded, signUp, errors, fetchStatus } = useSignUp();
   const { isSignedIn } = useAuth();
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [code, setCode] = React.useState("");
+
+  if (!isLoaded || !signUp) {
+    return null;
+  }
 
   const handleSubmit = async () => {
     const { error } = await signUp.password({
@@ -51,7 +55,6 @@ export default function SignUpPage() {
           const url = decorateUrl("/");
           if (url.startsWith("http")) {
             if (Platform.OS === "web") {
-              // eslint-disable-next-line no-undef
               window.location.href = url;
             } else {
               Linking.openURL(url);
