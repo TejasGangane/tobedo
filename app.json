@@ -31,6 +31,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/fix-kotlin-resolution",
       "expo-router",
       [
         "expo-splash-screen",
@@ -50,7 +51,7 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "2.2.20"
+            "kotlinVersion": "2.1.0"
           }
         }
       ]
@@ -59,7 +60,6 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "privacyPolicyUrl": "https://tejasgangane.github.io/tobedo-privacy-policy/",
     "extra": {
       "router": {},
       "eas": {
