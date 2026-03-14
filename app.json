@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.tobedo"
+      "bundleIdentifier": "com.anonymous.tobedo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -42,12 +45,27 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.2.20"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "privacyPolicyUrl": "https://tejasgangane.github.io/tobedo-privacy-policy/"
+    "privacyPolicyUrl": "https://tejasgangane.github.io/tobedo-privacy-policy/",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "396893a7-93de-4f87-b1d0-a17b6f03a8bd"
+      }
+    },
+    "owner": "app-tobedo"
   }
 }

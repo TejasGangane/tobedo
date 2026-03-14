@@ -1,31 +1,31 @@
-import React from "react";
 import { render } from "@testing-library/react-native";
+import React from "react";
 
-import { SignedIn, SignedOut } from "@clerk/expo";
+import { SignedOut } from "@clerk/expo";
 import Index from "../app/index";
 
 jest.mock("@clerk/expo", () => ({
-  SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SignedOut: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    SignedOut: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 jest.mock("expo-router", () => {
-  const actual = jest.requireActual("expo-router");
-  return {
-    ...actual,
-    Redirect: ({ href }: { href: string }) => <>{href}</>,
-  };
+    const actual = jest.requireActual("expo-router");
+    return {
+        ...actual,
+        Redirect: ({ href }: { href: string }) => <>{href}</>,
+    };
 });
 
 describe("auth flow", () => {
-  it("redirects signed-out users to sign-in", () => {
-    const { getByText } = render(
-      <SignedOut>
-        <Index />
-      </SignedOut>,
-    );
+    it("redirects signed-out users to sign-in", () => {
+        const { getByText } = render(
+            <SignedOut>
+                <Index />
+            </SignedOut>,
+        );
 
-    expect(getByText("/sign-in")).toBeTruthy();
-  });
+        expect(getByText("/sign-in")).toBeTruthy();
+    });
 });
 
