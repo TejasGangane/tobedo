@@ -23,30 +23,63 @@ allprojects { proj ->
 }
 `;
 
+// Duplicate MANIFEST.MF from OkHttp and JSpecify JARs; exclude so mergeReleaseJavaResource succeeds.
+const PACKAGING_BLOCK = `
+    packaging {
+        resources {
+            excludes += ["META-INF/versions/9/OSGI-INF/MANIFEST.MF"]
+        }
+    }
+`;
+
 function withFixKotlinResolution(config) {
   return withDangerousMod(config, [
     "android",
     async (config) => {
       const projectRoot = config.modRequest.platformProjectRoot;
+
+      // 1) Root build.gradle: Kotlin resolution strategy
       const buildGradlePath = path.join(projectRoot, "build.gradle");
-      if (!fs.existsSync(buildGradlePath)) return config;
+      if (fs.existsSync(buildGradlePath)) {
+        let content = fs.readFileSync(buildGradlePath, "utf8");
+        if (!content.includes("Align Kotlin stdlib/reflect with Expo Kotlin toolchain")) {
+          const anchor = "allprojects {";
+          const start = content.indexOf(anchor);
+          if (start !== -1) {
+            const endOfBlock = content.indexOf("  }\n}\n", start);
+            if (endOfBlock !== -1) {
+              const insertIdx = endOfBlock + "  }\n}\n".length;
+              content =
+                content.slice(0, insertIdx) +
+                KOTLIN_RESOLUTION_BLOCK +
+                content.slice(insertIdx);
+              fs.writeFileSync(buildGradlePath, content);
+            }
+          }
+        }
+      }
 
-      let content = fs.readFileSync(buildGradlePath, "utf8");
-      if (content.includes("Align Kotlin stdlib/reflect with Expo Kotlin toolchain")) return config;
+      // 2) App build.gradle: packaging exclude for duplicate OSGI MANIFEST.MF
+      const appBuildGradlePath = path.join(projectRoot, "app", "build.gradle");
+      if (fs.existsSync(appBuildGradlePath)) {
+        let appContent = fs.readFileSync(appBuildGradlePath, "utf8");
+        if (
+          !appContent.includes("META-INF/versions/9/OSGI-INF/MANIFEST.MF") &&
+          !appContent.includes("packaging {")
+        ) {
+          const androidBlock = "android {";
+          const idx = appContent.indexOf(androidBlock);
+          if (idx !== -1) {
+            const insertIdx = idx + androidBlock.length;
+            appContent =
+              appContent.slice(0, insertIdx) +
+              PACKAGING_BLOCK +
+              appContent.slice(insertIdx);
+            fs.writeFileSync(appBuildGradlePath, appContent);
+          }
+        }
+      }
 
-      // Insert after the first allprojects { repositories { ... } } block
-      const anchor = "allprojects {";
-      const start = content.indexOf(anchor);
-      if (start === -1) return config;
-      const endOfBlock = content.indexOf("  }\n}\n", start);
-      if (endOfBlock === -1) return config;
-      const insertIdx = endOfBlock + "  }\n}\n".length;
-
-      content =
-        content.slice(0, insertIdx) +
-        KOTLIN_RESOLUTION_BLOCK +
-        content.slice(insertIdx);
-      fs.writeFileSync(buildGradlePath, content);
       return config;
     },
   ]);
