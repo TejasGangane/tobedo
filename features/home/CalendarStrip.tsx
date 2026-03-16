@@ -16,20 +16,18 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Colors } from "@/constants/Colors";
-import { buildMonthStrip, parseDateKey } from "./dateUtils";
+import { formatDateKey, parseDateKey } from "./dateUtils";
 
 type Props = {
   selectedDate: string;
   onChangeDate: (dateKey: string) => void;
 };
 
-// Ensure exactly 7 day pills fit within the padded content width.
+// Ensure exactly 7 day pills fit within the screen width.
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const ROOT_HORIZONTAL_PADDING = 24; // matches HomeScreen root paddingHorizontal
-const CALENDAR_AVAILABLE_WIDTH = SCREEN_WIDTH - ROOT_HORIZONTAL_PADDING * 2;
 const DAYS_VISIBLE = 7;
-const DAY_TOTAL_WIDTH = CALENDAR_AVAILABLE_WIDTH / DAYS_VISIBLE;
-const DAY_ITEM_WIDTH = DAY_TOTAL_WIDTH; // slightly wider pill for each day
+const DAY_TOTAL_WIDTH = SCREEN_WIDTH / DAYS_VISIBLE;
+const DAY_ITEM_WIDTH = DAY_TOTAL_WIDTH;
 
 export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
   const selectorX = useSharedValue(0);
@@ -39,10 +37,25 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
     Record<string, { x: number; width: number }>
   >({});
 
-  const days = useMemo(
-    () => buildMonthStrip(parseDateKey(selectedDate)),
-    [selectedDate],
-  );
+  const days = useMemo(() => {
+    const anchor = parseDateKey(selectedDate);
+    const rangeDays = 90; // ~3 months back and forward
+    const start = new Date(anchor);
+    start.setDate(start.getDate() - rangeDays);
+
+    const result: { key: string; label: string; dayNumber: number }[] = [];
+
+    for (let i = 0; i <= rangeDays * 2; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = formatDateKey(d);
+      const label = d.toLocaleDateString(undefined, { weekday: "short" });
+      result.push({ key, label, dayNumber: d.getDate() });
+    }
+
+    return result;
+  }, [selectedDate]);
+  const todayKey = useMemo(() => formatDateKey(new Date()), []);
 
   useEffect(() => {
     const layout = dayLayouts[selectedDate];
@@ -53,12 +66,12 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
     const targetWidth = layout.width + padding;
 
     selectorX.value = withTiming(targetX, {
-      duration: 260,
-      easing: Easing.inOut(Easing.cubic),
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
     });
     selectorWidth.value = withTiming(targetWidth, {
-      duration: 260,
-      easing: Easing.inOut(Easing.cubic),
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
     });
 
     const centerOfDay = layout.x + layout.width / 2;
@@ -87,8 +100,17 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
         contentContainerStyle={styles.calendarStripContent}
       >
         <Animated.View style={[styles.calendarSelector, selectorStyle]} />
-        {days.map((d) => {
+        {days.map((d, index) => {
           const isSelected = d.key === selectedDate;
+          const isToday = d.key === todayKey;
+          const selectedIndex = days.findIndex(
+            (day) => day.key === selectedDate,
+          );
+          const distanceFromSelected =
+            selectedIndex === -1 ? 0 : Math.abs(index - selectedIndex);
+          const clampedDistance = Math.min(distanceFromSelected, 3);
+          const scale = 1.1 - clampedDistance * 0.06; // small -> big -> small around selected
+
           return (
             <Pressable
               key={d.key}
@@ -101,7 +123,15 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
                 }));
               }}
             >
-              <Animated.View layout={Layout.springify()} style={styles.day}>
+              <Animated.View
+                layout={Layout.springify()}
+                style={[
+                  styles.day,
+                  {
+                    transform: [{ scale }],
+                  },
+                ]}
+              >
                 <View style={styles.dayTextColumn}>
                   <Text
                     style={[
@@ -122,6 +152,7 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
                     {d.label.toUpperCase()}
                   </Text>
                 </View>
+                {isToday && <View style={styles.todayDot} />}
               </Animated.View>
             </Pressable>
           );
@@ -133,7 +164,7 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
 
 const styles = StyleSheet.create({
   calendarStrip: {
-    width: CALENDAR_AVAILABLE_WIDTH,
+    width: SCREEN_WIDTH,
     alignSelf: "center",
     marginTop: 0,
     marginBottom: 0,
@@ -172,6 +203,13 @@ const styles = StyleSheet.create({
   dayTextColumn: {
     flexDirection: "column",
     alignItems: "center",
+  },
+  todayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 2,
+    backgroundColor: Colors.highlightText,
   },
   dayLabel: {
     fontSize: 10,

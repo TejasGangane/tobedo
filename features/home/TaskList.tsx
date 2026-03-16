@@ -1,6 +1,13 @@
 import { FontAwesome } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import DraggableFlatList, {
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
@@ -15,15 +22,23 @@ type Props = {
   onToggleDone: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onStartPomodoro: (taskId: string) => void;
+  onCancelPomodoro: () => void;
   onReorder: (tasks: Task[]) => void;
+  onRefreshToToday?: () => void;
+  isRefreshing?: boolean;
 };
+
+const DASH_COUNT = 28;
 
 export function TaskList({
   tasks,
   onToggleDone,
   onDelete,
   onStartPomodoro,
+  onCancelPomodoro,
   onReorder,
+  onRefreshToToday,
+  isRefreshing,
 }: Props) {
   return (
     <View style={styles.listContainer}>
@@ -33,9 +48,17 @@ export function TaskList({
         showsVerticalScrollIndicator={false}
         activationDistance={4}
         contentContainerStyle={
-          tasks.length === 0 ? styles.emptyListContent : undefined
+          tasks.length === 0 ? styles.emptyListContent : { paddingBottom: 24 }
         }
         onDragEnd={({ data }) => onReorder(data)}
+        refreshControl={
+          onRefreshToToday ? (
+            <RefreshControl
+              refreshing={Boolean(isRefreshing)}
+              onRefresh={onRefreshToToday}
+            />
+          ) : undefined
+        }
         renderItem={({
           item,
           getIndex,
@@ -89,46 +112,89 @@ export function TaskList({
                 </View>
               )}
             >
-              <Animated.View
-                style={[
-                  styles.taskRow,
-                  isActive && styles.taskRowActive,
-                ]}
-                entering={FadeInDown.delay(safeIndex * 40)}
-                layout={Layout.springify()}
+              <Pressable
+                onLongPress={() => {
+                  Alert.alert(
+                    "Delete task?",
+                    "This will remove the task from your list.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => onDelete(item.id),
+                      },
+                    ],
+                  );
+                }}
+                delayLongPress={400}
+                style={styles.taskRowPressable}
               >
-                <Pressable
-                  onLongPress={drag}
-                  delayLongPress={120}
-                  onPress={() => onToggleDone(item.id)}
+                <Animated.View
                   style={[
-                    styles.taskNumberWrapper,
-                    item.isDone && styles.taskNumberDone,
+                    styles.taskRowOuter,
+                    isActive && styles.taskRowActive,
                   ]}
+                  entering={FadeInDown.delay(safeIndex * 40)}
+                  layout={Layout.springify()
+                    .damping(18)
+                    .stiffness(260)
+                    .mass(0.9)}
                 >
-                  {item.isDone ? (
-                    <FontAwesome name="check" size={14} color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.taskNumberText}>{safeIndex + 1}</Text>
-                  )}
-                </Pressable>
-                <View style={styles.taskMain}>
-                  <Text
+                  <Animated.View
                     style={[
-                      styles.taskTitle,
-                      item.isDone && styles.taskTitleDone,
+                      styles.taskRow,
+                      item.isDone && styles.taskRowDone,
                     ]}
-                    numberOfLines={2}
                   >
-                    {item.title}
-                  </Text>
-                </View>
-              </Animated.View>
+                    <Pressable
+                      onPress={() => onToggleDone(item.id)}
+                      style={[
+                        styles.taskNumberWrapper,
+                        item.isDone && styles.taskNumberDone,
+                      ]}
+                    >
+                      {item.isDone ? (
+                        <FontAwesome
+                          name="check"
+                          size={12}
+                          color={Colors.secondaryText}
+                        />
+                      ) : (
+                        <Text style={styles.taskNumberText}>
+                          {safeIndex + 1}
+                        </Text>
+                      )}
+                    </Pressable>
+                    <View style={styles.taskMain}>
+                      <Text
+                        style={[
+                          styles.taskTitle,
+                          item.isDone && styles.taskTitleDone,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {item.title.length > 28
+                          ? `${item.title.slice(0, 25)}...`
+                          : item.title}
+                      </Text>
+                    </View>
+                    <View style={styles.dashedSeparatorRow}>
+                      {Array.from({ length: DASH_COUNT }).map((_, idx) => (
+                        <View key={idx} style={styles.dashDot} />
+                      ))}
+                    </View>
+                  </Animated.View>
+                </Animated.View>
+              </Pressable>
             </Swipeable>
           );
         }}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No tasks for this day yet.</Text>
+          <View style={styles.emptyListContent}>
+            <Text style={styles.emptyText}>No tasks for this day yet.</Text>
+          </View>
         }
       />
     </View>
@@ -138,90 +204,132 @@ export function TaskList({
 const styles = StyleSheet.create({
   listContainer: {
     flex: 1,
-    marginBottom: 32,
   },
   emptyListContent: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 240,
   },
   emptyText: {
     fontSize: 18,
     color: Colors.tertiaryText,
   },
+  taskRowOuter: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.actionButtonStroke,
+    paddingVertical: 20,
+    paddingHorizontal: 14,
+    marginHorizontal: -10,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    shadowColor: "#000000",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  taskRowPressable: {
+    flex: 1,
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
   },
   taskRowActive: {
     transform: [{ scale: 0.98 }],
-    opacity: 0.9,
+  },
+  taskRowDone: {
+    opacity: 0.45,
   },
   taskNumberWrapper: {
     width: 26,
     height: 26,
     borderRadius: 6,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: Colors.actionButtonStroke,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    marginLeft: 36,
     marginRight: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   taskNumberDone: {
-    backgroundColor: Colors.authButtonBg,
-    borderColor: Colors.authButtonBg,
+    backgroundColor: Colors.actionButtonBg,
+    borderColor: Colors.actionButtonStroke,
+    elevation: 2,
   },
   taskNumberText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.secondaryText,
   },
   taskMain: {
     flex: 1,
   },
   taskTitle: {
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.primaryText,
   },
   taskTitleDone: {
     color: Colors.tertiaryText,
     textDecorationLine: "line-through",
   },
+  dashedSeparatorRow: {
+    position: "absolute",
+    left: -24,
+    right: -24,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    pointerEvents: "none",
+  },
+  dashDot: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 1,
+    backgroundColor: Colors.actionButtonStroke,
+  },
   swipeActionContainer: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "flex-start",
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
+    marginHorizontal: -80,
   },
   swipeButton: {
     minWidth: 88,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderRadius: 0,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "stretch",
   },
   swipePomodoroButton: {
     backgroundColor: Colors.authButtonBg,
+    borderRadius: 0,
+    flex: 1,
   },
   swipeDeleteButton: {
     backgroundColor: "#FEE2E2",
-    marginLeft: "auto",
+    borderRadius: 0,
+    flex: 1,
   },
   swipePomodoroText: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+    marginLeft: 80,
+    textAlign: "left",
+    alignSelf: "flex-start",
   },
   swipeDeleteText: {
     color: "#B91C1C",
     fontSize: 14,
     fontWeight: "600",
+    marginRight: 80,
+    textAlign: "right",
+    alignSelf: "flex-end",
   },
 });
 

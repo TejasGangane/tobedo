@@ -15,11 +15,11 @@ import {
   View,
 } from "react-native";
 import Animated, {
-  Easing,
   FadeInDown,
   Layout,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,7 +31,7 @@ import { TaskList } from "./TaskList";
 import { useTasksContext } from "./TasksContext";
 import type { PomodoroState, Task } from "./types";
 
-const DEFAULT_POMODORO_MINUTES = 30;
+const DEFAULT_POMODORO_MINUTES = 25;
 const initialToday = formatDateKey(new Date());
 
 export default function HomeScreen() {
@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(initialToday);
   const {
     tasks,
+    reloadTasks,
     addTask,
     toggleTaskDone,
     deleteTask,
@@ -54,10 +55,20 @@ export default function HomeScreen() {
   const [isPomodoroExpanded, setIsPomodoroExpanded] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
   const [lastDeletedTask, setLastDeletedTask] = useState<Task | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [taskSummaryOverride, setTaskSummaryOverride] = useState<string | null>(
+    null,
+  );
+  const [taskSummaryIsHighlight, setTaskSummaryIsHighlight] =
+    useState<boolean>(false);
+  const taskSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const addScale = useSharedValue(0.9);
   const addInputRef = useRef<TextInput | null>(null);
+  const headerScale = useSharedValue(1);
 
   useEffect(() => {
     addScale.value = withTiming(1, { duration: 300 });
@@ -85,10 +96,27 @@ export default function HomeScreen() {
     transform: [{ scale: addScale.value }],
   }));
 
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: headerScale.value }],
+  }));
+
+
   const tasksForSelectedDate = useMemo(
     () => tasks.filter((t) => t.date === selectedDate),
     [tasks, selectedDate],
   );
+
+  const totalTasksForSelectedDate = tasksForSelectedDate.length;
+  const remainingTasksForSelectedDate = useMemo(
+    () => tasksForSelectedDate.filter((t) => !t.isDone).length,
+    [tasksForSelectedDate],
+  );
+
+  const handleRefreshTasks = useCallback(async () => {
+    setIsRefreshingTasks(true);
+    await reloadTasks();
+    setIsRefreshingTasks(false);
+  }, [reloadTasks]);
 
   useEffect(() => {
     if (pomodoro.mode !== "focus") return;
@@ -129,6 +157,23 @@ export default function HomeScreen() {
   }, [pomodoro]);
 
   const startPomodoro = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.isDone) {
+      // If user tries Pomodoro on a completed task, temporarily change
+      // the task summary text & color instead of showing a separate alert.
+      setTaskSummaryOverride("Pomodoro already completed for this task");
+      setTaskSummaryIsHighlight(true);
+      if (taskSummaryTimeoutRef.current) {
+        clearTimeout(taskSummaryTimeoutRef.current);
+      }
+      taskSummaryTimeoutRef.current = setTimeout(() => {
+        setTaskSummaryOverride(null);
+        setTaskSummaryIsHighlight(false);
+        taskSummaryTimeoutRef.current = null;
+      }, 2500);
+      return;
+    }
+
     const totalSeconds = pomodoroMinutes * 60;
     setPomodoro({
       mode: "ready",
@@ -142,6 +187,26 @@ export default function HomeScreen() {
   const stopPomodoro = () => {
     setPomodoro({ mode: "idle" });
     setIsPomodoroExpanded(false);
+  };
+
+  const markPomodoroCompletedNow = () => {
+    if (pomodoro.mode === "idle" || !pomodoro.taskId) {
+      return;
+    }
+    completeTask(pomodoro.taskId);
+    stopPomodoro();
+  };
+
+  const togglePomodoroPlayPause = () => {
+    setPomodoro((prev) => {
+      if (prev.mode === "ready") {
+        return { ...prev, mode: "focus" };
+      }
+      if (prev.mode === "focus") {
+        return { ...prev, mode: "ready" };
+      }
+      return prev;
+    });
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -210,6 +275,11 @@ export default function HomeScreen() {
     .padStart(2, "0");
   const seconds = (remainingTime % 60).toString().padStart(2, "0");
 
+  const isSelectedDateToday = useMemo(() => {
+    const todayKey = formatDateKey(new Date());
+    return selectedDate === todayKey;
+  }, [selectedDate]);
+
   const handleUndoDelete = () => {
     if (!lastDeletedTask) return;
 
@@ -237,49 +307,68 @@ export default function HomeScreen() {
         style={{ flex: 1 }}
       >
         <View style={styles.root}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setIsCalendarOpen(true)}
-            style={styles.headerRow}
-          >
-            <View style={styles.weekdayWrapper}>
-              <Text style={styles.weekdayText}>
-                {parseDateKey(selectedDate).toLocaleDateString(undefined, {
-                  weekday: "short",
-                })}
-              </Text>
-              <View style={styles.todayDot} />
-            </View>
-            <View style={styles.dateTextWrapper}>
-              <Text style={styles.dateText}>
-                {parseDateKey(selectedDate).toLocaleDateString(undefined, {
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-              <Text style={styles.dateSubText}>
-                {parseDateKey(selectedDate).getFullYear()}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <Animated.View style={headerAnimatedStyle}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setIsCalendarOpen(true);
+                headerScale.value = withSpring(0.96, {
+                  damping: 16,
+                  stiffness: 220,
+                  mass: 0.9,
+                });
+                headerScale.value = withSpring(1, {
+                  damping: 18,
+                  stiffness: 260,
+                  mass: 0.9,
+                });
+              }}
+              style={styles.headerRow}
+            >
+              <View style={styles.weekdayWrapper}>
+                <Text style={styles.weekdayText}>
+                  {parseDateKey(selectedDate).toLocaleDateString(undefined, {
+                    weekday: "short",
+                  })}
+                </Text>
+                {isSelectedDateToday && <View style={styles.todayDot} />}
+              </View>
+              <View style={styles.dateTextWrapper}>
+                <Text style={styles.dateText}>
+                  {parseDateKey(selectedDate).toLocaleDateString(undefined, {
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </Text>
+                <Text style={styles.dateSubText}>
+                  {parseDateKey(selectedDate).getFullYear()}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
 
           <CalendarStrip
             selectedDate={selectedDate}
             onChangeDate={setSelectedDate}
           />
 
-          <TaskList
-            tasks={tasksForSelectedDate}
-            onToggleDone={handleToggleDone}
-            onDelete={handleDeleteTask}
-            onStartPomodoro={startPomodoro}
-            onReorder={(orderedTasks: Task[]) =>
-              reorderTasksForDate(
-                selectedDate,
-                orderedTasks.map((t: Task) => t.id),
-              )
-            }
-          />
+          <View style={styles.taskListWrapper}>
+            <TaskList
+              tasks={tasksForSelectedDate}
+              onToggleDone={handleToggleDone}
+              onDelete={handleDeleteTask}
+              onStartPomodoro={startPomodoro}
+              onCancelPomodoro={stopPomodoro}
+              onReorder={(orderedTasks: Task[]) =>
+                reorderTasksForDate(
+                  selectedDate,
+                  orderedTasks.map((t: Task) => t.id),
+                )
+              }
+              onRefreshToToday={handleRefreshTasks}
+              isRefreshing={isRefreshingTasks}
+            />
+          </View>
 
           {pomodoro.mode !== "idle" && !isPomodoroExpanded && (
             <Animated.View
@@ -304,7 +393,7 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
               <Pressable style={styles.stopButton} onPress={stopPomodoro}>
-                <Text style={styles.stopButtonText}>×</Text>
+                <Text style={styles.stopButtonText}>Cancel</Text>
               </Pressable>
             </Animated.View>
           )}
@@ -316,18 +405,9 @@ export default function HomeScreen() {
             minutesLabel={minutes}
             secondsLabel={seconds}
             onChangeMinutes={updatePomodoroMinutes}
-            onTogglePlayPause={() => {
-              setPomodoro((prev) => {
-                if (prev.mode === "ready") {
-                  return { ...prev, mode: "focus" };
-                }
-                if (prev.mode === "focus") {
-                  return { ...prev, mode: "ready" };
-                }
-                return prev;
-              });
-            }}
-            onCollapse={() => setIsPomodoroExpanded(false)}
+            onTogglePlayPause={togglePomodoroPlayPause}
+            onStopPomodoro={stopPomodoro}
+            onMarkCompleted={markPomodoroCompletedNow}
           />
 
           {lastDeletedTask && (
@@ -343,22 +423,40 @@ export default function HomeScreen() {
             </Animated.View>
           )}
 
-          {pomodoro.mode === "idle" && (
-            <Animated.View style={[styles.addTaskBar, addAnimatedStyle]}>
-              <Pressable
-                style={styles.addButton}
-                onPress={() => {
-                  setDraftTitle("");
-                  setIsAddingTask(true);
-                }}
-              >
-                <Text style={styles.addButtonText}>+</Text>
-              </Pressable>
-            </Animated.View>
-          )}
+          {pomodoro.mode === "idle" &&
+            !isPomodoroExpanded &&
+            totalTasksForSelectedDate > 0 && (
+              <View style={styles.taskSummaryBar}>
+                <Text
+                  style={[
+                    styles.taskSummaryText,
+                    taskSummaryIsHighlight && styles.taskSummaryTextHighlight,
+                  ]}
+                >
+                  {taskSummaryOverride
+                    ? taskSummaryOverride
+                    : remainingTasksForSelectedDate === 0
+                      ? "All tasks completed"
+                      : `${remainingTasksForSelectedDate} of ${totalTasksForSelectedDate} tasks remaining`}
+                </Text>
+              </View>
+            )}
 
         </View>
       </KeyboardAvoidingView>
+      {pomodoro.mode === "idle" && (
+        <Animated.View style={[styles.addTaskBar, addAnimatedStyle]}>
+          <Pressable
+            style={styles.addButton}
+            onPress={() => {
+              setDraftTitle("");
+              setIsAddingTask(true);
+            }}
+          >
+            <Text style={styles.addButtonText}>+</Text>
+          </Pressable>
+        </Animated.View>
+      )}
       <CalendarModal
         visible={isCalendarOpen}
         selectedDate={selectedDate}
@@ -511,17 +609,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
     backgroundColor: Colors.actionButtonBg,
     borderWidth: 1,
     borderColor: Colors.actionButtonStroke,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    marginBottom: 24,
+    marginLeft: 0,
+    alignSelf: "center",
   },
   pomodoroBarContent: {
     flexDirection: "row",
@@ -548,13 +643,14 @@ const styles = StyleSheet.create({
     color: Colors.primaryText,
   },
   stopButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: Colors.authButtonBg,
+    backgroundColor: "#EF4444",
   },
   stopButtonText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "600",
     color: "#FFFFFF",
   },
   swipeLeftAction: {
@@ -620,6 +716,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Colors.highlightText,
+  },
+  taskSummaryBar: {
+    marginTop: 0,
+    marginBottom: 0,
+    marginHorizontal: -24,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    height: 32,
+    borderRadius: 0,
+    alignSelf: "stretch",
+    backgroundColor: Colors.background,
+    borderTopWidth: 1,
+    borderColor: Colors.actionButtonStroke,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 2,
+  },
+  taskSummaryText: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    textAlign: "center",
+    alignSelf: "center",
+    width: "100%",
+    marginTop: 2,
+  },
+  taskSummaryIcon: {
+    fontSize: 14,
+  },
+  taskSummaryTextHighlight: {
+    color: Colors.highlightText,
+    fontWeight: "600",
+  },
+  taskListWrapper: {
+    flex: 1,
+    marginHorizontal: -24,
   },
   addModalBackdrop: {
     flex: 1,

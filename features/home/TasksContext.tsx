@@ -9,6 +9,7 @@ import { useTasks } from "./useTasks";
 
 type TasksContextValue = {
   tasks: Task[];
+  reloadTasks: () => Promise<void>;
   addTask: (title: string, date: string) => void;
   toggleTaskDone: (taskId: string) => void;
   deleteTask: (taskId: string) => void;

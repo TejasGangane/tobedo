@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { Task } from "./types";
 
@@ -8,6 +8,33 @@ const BASE_TASKS_STORAGE_KEY = "tobedo.tasks.v1";
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storageKey, setStorageKey] = useState<string | null>(null);
+
+  const reloadTasks = useCallback(async () => {
+    const key = BASE_TASKS_STORAGE_KEY;
+    try {
+      const stored = await AsyncStorage.getItem(key);
+      if (!stored) {
+        setTasks([]);
+        return;
+      }
+      const parsed = JSON.parse(stored) as Task[] | unknown;
+      if (Array.isArray(parsed)) {
+        setTasks(
+          parsed.map((t) => ({
+            id: String((t as Task).id),
+            title: (t as Task).title,
+            date: (t as Task).date,
+            isDone: Boolean((t as Task).isDone),
+          })),
+        );
+      } else {
+        setTasks([]);
+      }
+    } catch {
+      // ignore corrupt storage
+      setTasks([]);
+    }
+  }, []);
 
   useEffect(() => {
     const key = BASE_TASKS_STORAGE_KEY;
@@ -131,6 +158,7 @@ export function useTasks() {
 
   return {
     tasks,
+    reloadTasks,
     addTask,
     toggleTaskDone,
     deleteTask,

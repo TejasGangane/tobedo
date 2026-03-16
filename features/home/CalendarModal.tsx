@@ -8,7 +8,7 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/Colors";
-import { buildMonthGrid, parseDateKey } from "./dateUtils";
+import { buildMonthGrid, formatDateKey, parseDateKey } from "./dateUtils";
 
 type Props = {
   visible: boolean;
@@ -26,6 +26,7 @@ export function CalendarModal({
   const [month, setMonth] = useState(() => parseDateKey(selectedDate));
 
   const weeks = useMemo(() => buildMonthGrid(month), [month]);
+  const todayKey = useMemo(() => formatDateKey(new Date()), []);
 
   return (
     <Modal
@@ -86,6 +87,7 @@ export function CalendarModal({
                 }
                 const cellDateKey = cell.key;
                 const isSelected = cellDateKey === selectedDate;
+                const isToday = cellDateKey === todayKey;
                 return (
                   <Pressable
                     key={cell.key}
@@ -106,6 +108,7 @@ export function CalendarModal({
                     >
                       {cell.dayNumber}
                     </Text>
+                    {isToday && <View style={styles.todayDot} />}
                   </Pressable>
                 );
               })}
@@ -193,6 +196,13 @@ const styles = StyleSheet.create({
   dayNumberSelected: {
     color: Colors.primaryText,
     fontWeight: "600",
+  },
+  todayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 2,
+    backgroundColor: Colors.highlightText,
   },
 });
 

@@ -1,22 +1,13 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-} from "react-native";
-import Animated, {
-  FadeInDown,
-  Layout,
-} from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import React, { useEffect } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInDown, Layout } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/Colors";
 import type { PomodoroState } from "./types";
 
-const POMODORO_ITEM_HEIGHT = 44;
 const MIN_POMODORO_MINUTES = 5;
 const MAX_POMODORO_MINUTES = 60;
 const POMODORO_STEP_MINUTES = 5;
@@ -29,7 +20,8 @@ type Props = {
   secondsLabel: string;
   onChangeMinutes: (nextMinutes: number) => void;
   onTogglePlayPause: () => void;
-  onCollapse: () => void;
+  onStopPomodoro: () => void;
+  onMarkCompleted: () => void;
 };
 
 export function PomodoroOverlay({
@@ -40,37 +32,15 @@ export function PomodoroOverlay({
   secondsLabel,
   onChangeMinutes,
   onTogglePlayPause,
-  onCollapse,
+  onStopPomodoro,
+  onMarkCompleted,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const pomodoroPickerRef = useRef<ScrollView | null>(null);
-
-  const pomodoroMinuteOptions = useMemo(
-    () =>
-      Array.from(
-        {
-          length:
-            (MAX_POMODORO_MINUTES - MIN_POMODORO_MINUTES) /
-              POMODORO_STEP_MINUTES +
-            1,
-        },
-        (_, idx) => MIN_POMODORO_MINUTES + idx * POMODORO_STEP_MINUTES,
-      ),
-    [],
-  );
 
   useEffect(() => {
     if (pomodoro.mode !== "ready") return;
 
-    const clampedMinutes = Math.min(
-      MAX_POMODORO_MINUTES,
-      Math.max(MIN_POMODORO_MINUTES, pomodoroMinutes),
-    );
-    const index =
-      (clampedMinutes - MIN_POMODORO_MINUTES) / POMODORO_STEP_MINUTES;
-    const y = index * POMODORO_ITEM_HEIGHT;
-
-    pomodoroPickerRef.current?.scrollTo({ y, animated: false });
+    // No-op: duration UI is controlled locally by +/- buttons
   }, [pomodoro.mode, pomodoroMinutes]);
 
   if (!visible || pomodoro.mode === "idle") {
@@ -90,8 +60,8 @@ export function PomodoroOverlay({
       layout={Layout.springify()}
     >
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={onCollapse}>
-          <Text style={styles.backText}>Back</Text>
+        <Pressable style={styles.backButton} onPress={onStopPomodoro}>
+          <Text style={styles.backText}>Cancel</Text>
         </Pressable>
       </View>
       <View style={styles.timeWrapper}>
@@ -100,47 +70,38 @@ export function PomodoroOverlay({
         </Text>
       </View>
       {pomodoro.mode === "ready" && (
-        <View style={styles.pickerContainer}>
-          <View style={styles.pickerHighlight} />
-          <ScrollView
-            ref={pomodoroPickerRef}
-            showsVerticalScrollIndicator={false}
-            snapToInterval={POMODORO_ITEM_HEIGHT}
-            decelerationRate="fast"
-            contentContainerStyle={styles.pickerContent}
-            onMomentumScrollEnd={(event) => {
-              const offsetY = event.nativeEvent.contentOffset.y;
-              const index = Math.round(offsetY / POMODORO_ITEM_HEIGHT);
-              const clampedIndex = Math.max(
-                0,
-                Math.min(pomodoroMinuteOptions.length - 1, index),
+        <View style={styles.inlinePickerContainer}>
+          <Pressable
+            style={styles.timeAdjustButton}
+            onPress={() => {
+              const next = Math.max(
+                MIN_POMODORO_MINUTES,
+                pomodoroMinutes - POMODORO_STEP_MINUTES,
               );
-              const nextMinutes = pomodoroMinuteOptions[clampedIndex];
-              onChangeMinutes(nextMinutes);
+              onChangeMinutes(next);
             }}
           >
-            {pomodoroMinuteOptions.map((value) => {
-              const isSelected = value === pomodoroMinutes;
-              return (
-                <View
-                  key={value}
-                  style={[
-                    styles.pickerItem,
-                    isSelected && styles.pickerItemSelected,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.pickerItemText,
-                      isSelected && styles.pickerItemTextSelected,
-                    ]}
-                  >
-                    {value} min
-                  </Text>
-                </View>
+            <Text style={styles.timeAdjustButtonText}>-</Text>
+          </Pressable>
+          <BlurView intensity={30} tint="light" style={styles.inlinePickerPill}>
+            <Animated.View layout={Layout.springify()} style={styles.inlinePickerValueWrapper}>
+              <Text style={styles.inlinePickerChipTextSelected}>
+                {pomodoroMinutes} min
+              </Text>
+            </Animated.View>
+          </BlurView>
+          <Pressable
+            style={styles.timeAdjustButton}
+            onPress={() => {
+              const next = Math.min(
+                MAX_POMODORO_MINUTES,
+                pomodoroMinutes + POMODORO_STEP_MINUTES,
               );
-            })}
-          </ScrollView>
+              onChangeMinutes(next);
+            }}
+          >
+            <Text style={styles.timeAdjustButtonText}>+</Text>
+          </Pressable>
         </View>
       )}
       <View style={styles.footer}>
@@ -158,6 +119,17 @@ export function PomodoroOverlay({
             />
           )}
         </Pressable>
+        {pomodoro.mode === "ready" &&
+          pomodoro.remainingSeconds < pomodoro.totalSeconds && (
+            <View style={styles.footerActions}>
+              <Pressable
+                style={[styles.footerButton, styles.footerButtonComplete]}
+                onPress={onMarkCompleted}
+              >
+                <Text style={styles.footerButtonText}>Mark as completed</Text>
+              </Pressable>
+            </View>
+          )}
       </View>
     </Animated.View>
   );
@@ -177,10 +149,11 @@ const styles = StyleSheet.create({
   },
   header: {
     width: "100%",
-    alignItems: "center",
     flexDirection: "row",
     justifyContent: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 0,
+    marginBottom: 8,
   },
   backButton: {
     paddingHorizontal: 12,
@@ -200,49 +173,73 @@ const styles = StyleSheet.create({
   },
   largeTime: {
     fontSize: 72,
-    letterSpacing: -2,
+    letterSpacing: -1.5,
     textAlign: "center",
     color: Colors.secondaryText,
+    fontVariant: ["tabular-nums"],
+    minWidth: 180,
   },
-  pickerContainer: {
-    height: POMODORO_ITEM_HEIGHT * 5,
+  inlinePickerContainer: {
     marginBottom: 24,
-    marginTop: 12,
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlinePickerContent: {
+    paddingHorizontal: 0,
+  },
+  inlinePickerPill: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 999,
     overflow: "hidden",
+    marginHorizontal: 8,
   },
-  pickerContent: {
-    paddingVertical: POMODORO_ITEM_HEIGHT * 2,
+  inlinePickerValueWrapper: {
+    minWidth: 80,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pickerHighlight: {
-    position: "absolute",
-    top: POMODORO_ITEM_HEIGHT * 2,
-    left: 0,
-    right: 0,
-    height: POMODORO_ITEM_HEIGHT,
-    borderRadius: 12,
-    backgroundColor: Colors.background,
+  inlinePickerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.actionButtonStroke,
+    marginHorizontal: 4,
+    backgroundColor: Colors.background,
   },
-  pickerItem: {
-    height: POMODORO_ITEM_HEIGHT,
-    justifyContent: "center",
-    alignItems: "center",
+  inlinePickerChipSelected: {
+    backgroundColor: Colors.actionButtonBg,
+    borderColor: Colors.actionButtonBg,
   },
-  pickerItemSelected: {},
-  pickerItemText: {
-    fontSize: 16,
+  inlinePickerChipText: {
+    fontSize: 14,
     color: Colors.tertiaryText,
   },
-  pickerItemTextSelected: {
-    fontSize: 18,
-    fontWeight: "600",
+  inlinePickerChipTextSelected: {
     color: Colors.primaryText,
+    fontWeight: "600",
+  },
+  timeAdjustButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.actionButtonStroke,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
+  },
+  timeAdjustButtonText: {
+    fontSize: 18,
+    color: Colors.secondaryText,
   },
   footer: {
     width: "100%",
     alignItems: "center",
-    paddingBottom: 8,
+    paddingBottom: 16,
   },
   playButton: {
     width: 72,
@@ -251,6 +248,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.actionButtonBg,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 36,
   },
   pauseIcon: {
     flexDirection: "row",
@@ -263,6 +261,33 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 3,
     backgroundColor: Colors.supportingText,
+  },
+  footerActions: {
+    width: "100%",
+    marginTop: 24,
+    paddingHorizontal: 24,
+  },
+  footerButton: {
+    width: "100%",
+    paddingVertical: 10,
+    borderRadius: 999,
+    marginBottom: -12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.actionButtonStroke,
+  },
+  footerButtonCancel: {
+    // unused – kept for visual consistency if needed later
+  },
+  footerButtonComplete: {
+    // subtle pill variant for mark completed
+  },
+  footerButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.primaryText,
   },
 });
 
