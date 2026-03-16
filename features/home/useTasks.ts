@@ -1,4 +1,3 @@
-import { useAuth } from "@clerk/expo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 
@@ -6,18 +5,12 @@ import type { Task } from "./types";
 
 const BASE_TASKS_STORAGE_KEY = "tobedo.tasks.v1";
 
-const getStorageKeyForUser = (userId: string | null | undefined) =>
-  userId ? `${BASE_TASKS_STORAGE_KEY}:${userId}` : BASE_TASKS_STORAGE_KEY;
-
 export function useTasks() {
-  const { userId, isLoaded } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storageKey, setStorageKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoaded) return;
-
-    const key = getStorageKeyForUser(userId);
+    const key = BASE_TASKS_STORAGE_KEY;
     setStorageKey(key);
 
     // Reset to empty while loading this user's data,
@@ -45,7 +38,7 @@ export function useTasks() {
     };
 
     loadTasks();
-  }, [isLoaded, userId]);
+  }, []);
 
   useEffect(() => {
     if (!tasks || !storageKey) return;
