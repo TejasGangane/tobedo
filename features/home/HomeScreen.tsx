@@ -1,8 +1,13 @@
+import { ScalePressable } from "@/components/ui/ScalePressable";
 import { Colors } from "@/constants/Colors";
-import { FontAwesome } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
+  BackHandler,
+  Alert,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -17,8 +22,10 @@ import {
 import Animated, {
   FadeInDown,
   Layout,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -33,10 +40,12 @@ import type { PomodoroState, Task } from "./types";
 
 const DEFAULT_POMODORO_MINUTES = 25;
 const initialToday = formatDateKey(new Date());
+const POMODORO_STORAGE_KEY = "tobedo.pomodoro.v1";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(initialToday);
+  const [displayedDate, setDisplayedDate] = useState(initialToday);
   const {
     tasks,
     reloadTasks,
@@ -58,31 +67,119 @@ export default function HomeScreen() {
   const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
   const [lastDeletedTask, setLastDeletedTask] = useState<Task | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [taskSummaryOverride, setTaskSummaryOverride] = useState<string | null>(
-    null,
-  );
-  const [taskSummaryIsHighlight, setTaskSummaryIsHighlight] =
-    useState<boolean>(false);
-  const taskSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const addScale = useSharedValue(0.9);
   const addInputRef = useRef<TextInput | null>(null);
   const headerScale = useSharedValue(1);
+  const weekdayTransition = useSharedValue(0);
+
+  // Restore persisted Pomodoro state (for background/resume continuity).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(POMODORO_STORAGE_KEY);
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as PomodoroState | unknown;
+        if (parsed && typeof parsed === "object" && "mode" in (parsed as any)) {
+          if (!cancelled) setPomodoro(parsed as PomodoroState);
+        }
+      } catch {
+        // ignore corrupt storage
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist Pomodoro state (debounced slightly).
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void AsyncStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(pomodoro));
+    }, 200);
+    return () => clearTimeout(timeout);
+  }, [pomodoro]);
 
   useEffect(() => {
     addScale.value = withTiming(1, { duration: 300 });
   }, [addScale]);
 
   useEffect(() => {
+    if (displayedDate === selectedDate) return;
+    weekdayTransition.value = 0;
+    // Blur (fade/soften) -> swap -> unblur.
+    // The selection updates instantly; this header updates after the blur peaks.
+    weekdayTransition.value = withTiming(1, { duration: 220 }, (finished) => {
+      if (!finished) return;
+      runOnJS(setDisplayedDate)(selectedDate);
+      weekdayTransition.value = withDelay(120, withTiming(0, { duration: 260 }));
+    });
+  }, [displayedDate, selectedDate, weekdayTransition]);
+
+  useEffect(() => {
     if (!isAddingTask) return;
 
-    const timeout = setTimeout(() => {
+    let cancelled = false;
+    const focus = () => {
+      if (cancelled) return;
       addInputRef.current?.focus();
-    }, 80);
+    };
 
-    return () => clearTimeout(timeout);
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      focus();
+      // small retry for Android / slower devices
+      setTimeout(focus, 120);
+    });
+
+    return () => {
+      cancelled = true;
+      interactionHandle.cancel();
+    };
   }, [isAddingTask]);
+
+  const focusAddInput = useCallback(() => {
+    const attempt = () => {
+      addInputRef.current?.focus();
+    };
+    // Run after the modal is mounted & animations settle.
+    InteractionManager.runAfterInteractions(() => {
+      attempt();
+      setTimeout(attempt, 80);
+      setTimeout(attempt, 180);
+      setTimeout(attempt, 420);
+      setTimeout(attempt, 800);
+      setTimeout(attempt, 1200);
+    });
+  }, []);
+
+  // Android: prevent exiting app when an overlay is open.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isAddingTask) {
+        setIsAddingTask(false);
+        return true;
+      }
+      if (isCalendarOpen) {
+        setIsCalendarOpen(false);
+        return true;
+      }
+      if (isPomodoroExpanded) {
+        setIsPomodoroExpanded(false);
+        return true;
+      }
+      if (pomodoro.mode !== "idle") {
+        // If a Pomodoro is active and the alert is showing, keep user on home.
+        // (They can cancel explicitly.)
+        return true;
+      }
+      return false;
+    });
+
+    return () => sub.remove();
+  }, [isAddingTask, isCalendarOpen, isPomodoroExpanded, pomodoro.mode]);
 
   // Each time this screen gains focus, jump to "today".
   useFocusEffect(
@@ -100,9 +197,31 @@ export default function HomeScreen() {
     transform: [{ scale: headerScale.value }],
   }));
 
+  const weekdayBlurStyle = useAnimatedStyle(() => {
+    const t = weekdayTransition.value; // 0 -> crisp, 1 -> blurred
+    return {
+      opacity: 1 - t * 0.55,
+      textShadowColor: "rgba(0,0,0,0.22)",
+      textShadowOffset: { width: 0, height: 0 },
+      textShadowRadius: t * 6,
+    };
+  });
+
 
   const tasksForSelectedDate = useMemo(
-    () => tasks.filter((t) => t.date === selectedDate),
+    () => {
+      const toKey = (raw: unknown) => {
+        const s = String(raw ?? "").trim();
+        const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+        const d = new Date(s);
+        if (!Number.isNaN(d.getTime())) return formatDateKey(d);
+        return s.slice(0, 10);
+      };
+
+      const selectedKey = toKey(selectedDate);
+      return tasks.filter((t) => toKey(t.date) === selectedKey);
+    },
     [tasks, selectedDate],
   );
 
@@ -118,27 +237,42 @@ export default function HomeScreen() {
     setIsRefreshingTasks(false);
   }, [reloadTasks]);
 
+  const recomputeFocusRemaining = useCallback(() => {
+    setPomodoro((current) => {
+      if (current.mode !== "focus") return current;
+      const startedAtMs = current.startedAtMs;
+      const remainingAtStartSeconds = current.remainingAtStartSeconds;
+      if (!startedAtMs || remainingAtStartSeconds == null) {
+        return current;
+      }
+      const elapsedSeconds = Math.floor((Date.now() - startedAtMs) / 1000);
+      const nextRemaining = remainingAtStartSeconds - elapsedSeconds;
+      if (nextRemaining <= 0) {
+        return { mode: "completed", taskId: current.taskId };
+      }
+      return {
+        ...current,
+        remainingSeconds: nextRemaining,
+      };
+    });
+  }, []);
+
   useEffect(() => {
     if (pomodoro.mode !== "focus") return;
-
-    const interval = setInterval(() => {
-      setPomodoro((current) => {
-        if (current.mode !== "focus") return current;
-        if (current.remainingSeconds <= 1) {
-          return {
-            mode: "completed",
-            taskId: current.taskId,
-          };
-        }
-        return {
-          ...current,
-          remainingSeconds: current.remainingSeconds - 1,
-        };
-      });
-    }, 1000);
-
+    // tick while foregrounded
+    const interval = setInterval(recomputeFocusRemaining, 1000);
     return () => clearInterval(interval);
-  }, [pomodoro.mode]);
+  }, [pomodoro.mode, recomputeFocusRemaining]);
+
+  useEffect(() => {
+    // when app comes back, immediately recompute remaining time
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        recomputeFocusRemaining();
+      }
+    });
+    return () => sub.remove();
+  }, [recomputeFocusRemaining]);
 
   // When a Pomodoro completes, mark the task done, briefly show completion, then reset.
   useEffect(() => {
@@ -159,18 +293,7 @@ export default function HomeScreen() {
   const startPomodoro = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.isDone) {
-      // If user tries Pomodoro on a completed task, temporarily change
-      // the task summary text & color instead of showing a separate alert.
-      setTaskSummaryOverride("Pomodoro already completed for this task");
-      setTaskSummaryIsHighlight(true);
-      if (taskSummaryTimeoutRef.current) {
-        clearTimeout(taskSummaryTimeoutRef.current);
-      }
-      taskSummaryTimeoutRef.current = setTimeout(() => {
-        setTaskSummaryOverride(null);
-        setTaskSummaryIsHighlight(false);
-        taskSummaryTimeoutRef.current = null;
-      }, 2500);
+      Alert.alert("Pomodoro unavailable", "This task is already completed.");
       return;
     }
 
@@ -200,10 +323,29 @@ export default function HomeScreen() {
   const togglePomodoroPlayPause = () => {
     setPomodoro((prev) => {
       if (prev.mode === "ready") {
-        return { ...prev, mode: "focus" };
+        return {
+          ...prev,
+          mode: "focus",
+          startedAtMs: Date.now(),
+          remainingAtStartSeconds: prev.remainingSeconds,
+        };
       }
       if (prev.mode === "focus") {
-        return { ...prev, mode: "ready" };
+        const startedAtMs = prev.startedAtMs ?? Date.now();
+        const remainingAtStartSeconds =
+          prev.remainingAtStartSeconds ?? prev.remainingSeconds;
+        const elapsedSeconds = Math.floor((Date.now() - startedAtMs) / 1000);
+        const nextRemaining = Math.max(
+          1,
+          remainingAtStartSeconds - elapsedSeconds,
+        );
+        return {
+          ...prev,
+          mode: "ready",
+          remainingSeconds: nextRemaining,
+          startedAtMs: undefined,
+          remainingAtStartSeconds: undefined,
+        };
       }
       return prev;
     });
@@ -326,22 +468,22 @@ export default function HomeScreen() {
               style={styles.headerRow}
             >
               <View style={styles.weekdayWrapper}>
-                <Text style={styles.weekdayText}>
-                  {parseDateKey(selectedDate).toLocaleDateString(undefined, {
+                <Animated.Text style={[styles.weekdayText, weekdayBlurStyle]}>
+                  {parseDateKey(displayedDate).toLocaleDateString(undefined, {
                     weekday: "short",
                   })}
-                </Text>
+                </Animated.Text>
                 {isSelectedDateToday && <View style={styles.todayDot} />}
               </View>
               <View style={styles.dateTextWrapper}>
                 <Text style={styles.dateText}>
-                  {parseDateKey(selectedDate).toLocaleDateString(undefined, {
+                  {parseDateKey(displayedDate).toLocaleDateString(undefined, {
                     month: "long",
                     day: "numeric",
                   })}
                 </Text>
                 <Text style={styles.dateSubText}>
-                  {parseDateKey(selectedDate).getFullYear()}
+                  {parseDateKey(displayedDate).getFullYear()}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -367,6 +509,11 @@ export default function HomeScreen() {
               }
               onRefreshToToday={handleRefreshTasks}
               isRefreshing={isRefreshingTasks}
+              onSwipeEmptyDate={(direction) => {
+                const d = parseDateKey(selectedDate);
+                d.setDate(d.getDate() + (direction === "next" ? 1 : -1));
+                setSelectedDate(formatDateKey(d));
+              }}
             />
           </View>
 
@@ -417,46 +564,67 @@ export default function HomeScreen() {
               layout={Layout.springify()}
             >
               <Text style={styles.undoText}>Task deleted</Text>
-              <Pressable onPress={handleUndoDelete}>
+              <ScalePressable pressedScale={0.97} onPress={handleUndoDelete}>
                 <Text style={styles.undoAction}>Undo</Text>
-              </Pressable>
+              </ScalePressable>
             </Animated.View>
           )}
 
-          {pomodoro.mode === "idle" &&
-            !isPomodoroExpanded &&
-            totalTasksForSelectedDate > 0 && (
-              <View style={styles.taskSummaryBar}>
-                <Text
-                  style={[
-                    styles.taskSummaryText,
-                    taskSummaryIsHighlight && styles.taskSummaryTextHighlight,
-                  ]}
-                >
-                  {taskSummaryOverride
-                    ? taskSummaryOverride
-                    : remainingTasksForSelectedDate === 0
-                      ? "All tasks completed"
-                      : `${remainingTasksForSelectedDate} of ${totalTasksForSelectedDate} tasks remaining`}
-                </Text>
+          <View style={styles.bottomDock} pointerEvents="box-none">
+            {pomodoro.mode === "idle" && totalTasksForSelectedDate > 0 && (
+              <View style={styles.taskStatusPillRow}>
+                <View style={styles.taskStatusPill}>
+                  {(() => {
+                    const done =
+                      totalTasksForSelectedDate - remainingTasksForSelectedDate;
+                    const remaining = remainingTasksForSelectedDate;
+
+                    if (done === 0) {
+                      return (
+                        <Text style={styles.taskStatusText}>
+                          {remaining} remaining
+                        </Text>
+                      );
+                    }
+
+                    if (remaining === 0) {
+                      return <Text style={styles.taskStatusText}>{done} done</Text>;
+                    }
+
+                    return (
+                      <>
+                        <Text style={styles.taskStatusText}>
+                          {done}/{totalTasksForSelectedDate} completed
+                        </Text>
+                        <View style={styles.taskStatusDot} />
+                        <Text style={styles.taskStatusText}>
+                          {remaining} remaining
+                        </Text>
+                      </>
+                    );
+                  })()}
+                </View>
               </View>
             )}
 
+            {pomodoro.mode === "idle" && (
+              <Animated.View style={[styles.addTaskBar, addAnimatedStyle]}>
+                <ScalePressable
+                  style={styles.addButton}
+                  onPress={() => {
+                    setDraftTitle("");
+                    setIsAddingTask(true);
+                    setTimeout(focusAddInput, 60);
+                  }}
+                >
+                  <Text style={styles.addButtonText}>+</Text>
+                </ScalePressable>
+              </Animated.View>
+            )}
+          </View>
+
         </View>
       </KeyboardAvoidingView>
-      {pomodoro.mode === "idle" && (
-        <Animated.View style={[styles.addTaskBar, addAnimatedStyle]}>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => {
-              setDraftTitle("");
-              setIsAddingTask(true);
-            }}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </Pressable>
-        </Animated.View>
-      )}
       <CalendarModal
         visible={isCalendarOpen}
         selectedDate={selectedDate}
@@ -470,6 +638,7 @@ export default function HomeScreen() {
         visible={isAddingTask}
         transparent
         animationType="fade"
+        onShow={focusAddInput}
         onRequestClose={() => setIsAddingTask(false)}
       >
         <View style={styles.addModalBackdrop}>
@@ -494,6 +663,7 @@ export default function HomeScreen() {
                 <TextInput
                   ref={addInputRef}
                   autoFocus
+                  showSoftInputOnFocus
                   placeholder="Create"
                   placeholderTextColor={Colors.secondaryText}
                   value={draftTitle}
@@ -522,6 +692,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: 0,
+    minHeight: 0,
   },
   headerRow: {
     flexDirection: "row",
@@ -680,8 +851,10 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 16,
     marginTop: 8,
+    marginHorizontal: -24,
     borderTopWidth: 1,
     borderTopColor: Colors.actionButtonStroke,
+    alignSelf: "stretch",
   },
   addButton: {
     width: 56,
@@ -717,46 +890,43 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.highlightText,
   },
-  taskSummaryBar: {
-    marginTop: 0,
-    marginBottom: 0,
-    marginHorizontal: -24,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    height: 32,
-    borderRadius: 0,
-    alignSelf: "stretch",
-    backgroundColor: Colors.background,
-    borderTopWidth: 1,
-    borderColor: Colors.actionButtonStroke,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    shadowColor: "#000000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 2,
-  },
-  taskSummaryText: {
-    fontSize: 12,
-    color: Colors.secondaryText,
-    textAlign: "center",
-    alignSelf: "center",
-    width: "100%",
-    marginTop: 2,
-  },
-  taskSummaryIcon: {
-    fontSize: 14,
-  },
-  taskSummaryTextHighlight: {
-    color: Colors.highlightText,
-    fontWeight: "600",
-  },
   taskListWrapper: {
     flex: 1,
-    marginHorizontal: -24,
+    marginHorizontal: 0,
+    minHeight: 0,
+  },
+  bottomDock: {
+    position: "absolute",
+    left: 24,
+    right: 24,
+    bottom: 0,
+  },
+  taskStatusPillRow: {
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  taskStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: Colors.actionButtonBg,
+    borderWidth: 1,
+    borderColor: Colors.actionButtonStroke,
+  },
+  taskStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.secondaryText,
+  },
+  taskStatusDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.tertiaryText,
+    marginHorizontal: 10,
   },
   addModalBackdrop: {
     flex: 1,

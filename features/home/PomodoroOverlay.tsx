@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/Colors";
 import type { PomodoroState } from "./types";
+import { ScalePressable } from "@/components/ui/ScalePressable";
 
 const MIN_POMODORO_MINUTES = 5;
 const MAX_POMODORO_MINUTES = 60;
@@ -60,9 +61,9 @@ export function PomodoroOverlay({
       layout={Layout.springify()}
     >
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={onStopPomodoro}>
+        <ScalePressable style={styles.backButton} onPress={onStopPomodoro}>
           <Text style={styles.backText}>Cancel</Text>
-        </Pressable>
+        </ScalePressable>
       </View>
       <View style={styles.timeWrapper}>
         <Text style={styles.largeTime}>
@@ -71,7 +72,7 @@ export function PomodoroOverlay({
       </View>
       {pomodoro.mode === "ready" && (
         <View style={styles.inlinePickerContainer}>
-          <Pressable
+          <ScalePressable
             style={styles.timeAdjustButton}
             onPress={() => {
               const next = Math.max(
@@ -82,7 +83,7 @@ export function PomodoroOverlay({
             }}
           >
             <Text style={styles.timeAdjustButtonText}>-</Text>
-          </Pressable>
+          </ScalePressable>
           <BlurView intensity={30} tint="light" style={styles.inlinePickerPill}>
             <Animated.View layout={Layout.springify()} style={styles.inlinePickerValueWrapper}>
               <Text style={styles.inlinePickerChipTextSelected}>
@@ -90,7 +91,7 @@ export function PomodoroOverlay({
               </Text>
             </Animated.View>
           </BlurView>
-          <Pressable
+          <ScalePressable
             style={styles.timeAdjustButton}
             onPress={() => {
               const next = Math.min(
@@ -101,11 +102,11 @@ export function PomodoroOverlay({
             }}
           >
             <Text style={styles.timeAdjustButtonText}>+</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
       <View style={styles.footer}>
-        <Pressable style={styles.playButton} onPress={onTogglePlayPause}>
+        <ScalePressable style={styles.playButton} onPress={onTogglePlayPause}>
           {pomodoro.mode === "focus" ? (
             <View style={styles.pauseIcon}>
               <View style={styles.pauseBar} />
@@ -118,16 +119,16 @@ export function PomodoroOverlay({
               color={Colors.supportingText}
             />
           )}
-        </Pressable>
+        </ScalePressable>
         {pomodoro.mode === "ready" &&
           pomodoro.remainingSeconds < pomodoro.totalSeconds && (
             <View style={styles.footerActions}>
-              <Pressable
+              <ScalePressable
                 style={[styles.footerButton, styles.footerButtonComplete]}
                 onPress={onMarkCompleted}
               >
                 <Text style={styles.footerButtonText}>Mark as completed</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           )}
       </View>

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "tobedo",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -22,6 +22,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.tobedo",
@@ -42,7 +43,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#FBFBFB",
           "dark": {
-            "backgroundColor": "#171717"
+            "backgroundColor": "#FBFBFB"
           }
         }
       ],

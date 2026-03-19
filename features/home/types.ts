@@ -12,6 +12,12 @@ export type PomodoroState =
       taskId: string;
       remainingSeconds: number;
       totalSeconds: number;
+      /**
+       * When in focus mode, we track wall-clock time so the timer
+       * continues correctly across app backgrounding.
+       */
+      startedAtMs?: number;
+      remainingAtStartSeconds?: number;
     }
   | {
       mode: "completed";

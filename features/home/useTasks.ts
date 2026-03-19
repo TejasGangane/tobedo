@@ -5,6 +5,32 @@ import type { Task } from "./types";
 
 const BASE_TASKS_STORAGE_KEY = "tobedo.tasks.v1";
 
+const formatDateKey = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeDateKey = (raw: unknown): string => {
+  const s = String(raw ?? "").trim();
+  // Accept:
+  // - YYYY-MM-DD
+  // - YYYY-M-D
+  // - ISO-like starting with a date (YYYY-MM-DD...)
+  const ymdPadded = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymdPadded) {
+    const [, y, m, d] = ymdPadded;
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  // Fallback: if it's parseable as a date, normalize to local YYYY-MM-DD.
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatDateKey(parsed);
+  }
+  return s;
+};
+
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [storageKey, setStorageKey] = useState<string | null>(null);
@@ -23,7 +49,7 @@ export function useTasks() {
           parsed.map((t) => ({
             id: String((t as Task).id),
             title: (t as Task).title,
-            date: (t as Task).date,
+            date: normalizeDateKey((t as Task).date),
             isDone: Boolean((t as Task).isDone),
           })),
         );
@@ -54,7 +80,7 @@ export function useTasks() {
             parsed.map((t) => ({
               id: String((t as Task).id),
               title: (t as Task).title,
-              date: (t as Task).date,
+              date: normalizeDateKey((t as Task).date),
               isDone: Boolean((t as Task).isDone),
             })),
           );
@@ -94,7 +120,7 @@ export function useTasks() {
       {
         id: String(Date.now()),
         title: trimmed,
-        date,
+        date: normalizeDateKey(date),
         isDone: false,
       },
     ]);

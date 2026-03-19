@@ -1,49 +1,87 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   Dimensions,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
-  Layout,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
+import { ScalePressable } from "@/components/ui/ScalePressable";
 import { Colors } from "@/constants/Colors";
-import { formatDateKey, parseDateKey } from "./dateUtils";
+import { formatDateKey } from "./dateUtils";
 
 type Props = {
   selectedDate: string;
   onChangeDate: (dateKey: string) => void;
 };
 
+type DayItem = { key: string; label: string; dayNumber: number };
+
 // Ensure exactly 7 day pills fit within the screen width.
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const DAYS_VISIBLE = 7;
 const DAY_TOTAL_WIDTH = SCREEN_WIDTH / DAYS_VISIBLE;
 const DAY_ITEM_WIDTH = DAY_TOTAL_WIDTH;
+const SELECTOR_PADDING = 10;
+const SIDE_PADDING = (SCREEN_WIDTH - DAY_ITEM_WIDTH) / 2;
+
+function CalendarDayPill({
+  d,
+  isSelected,
+  isToday,
+  onPress,
+}: {
+  d: DayItem;
+  isSelected: boolean;
+  isToday: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable onPress={onPress} style={styles.dayPressable}>
+      <View style={styles.day}>
+        <View style={styles.dayTextColumn}>
+          <Text
+            style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}
+            numberOfLines={1}
+          >
+            {d.dayNumber}
+          </Text>
+          <Text
+            style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}
+            numberOfLines={1}
+          >
+            {d.label.toUpperCase()}
+          </Text>
+        </View>
+        {isToday && <View style={styles.todayDot} />}
+      </View>
+    </ScalePressable>
+  );
+}
 
 export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
   const selectorX = useSharedValue(0);
   const selectorWidth = useSharedValue(DAY_ITEM_WIDTH);
+  const nudgeX = useSharedValue(0);
   const calendarStripRef = useRef<ScrollView | null>(null);
-  const [dayLayouts, setDayLayouts] = useState<
-    Record<string, { x: number; width: number }>
-  >({});
+  const lastSelectedTapRef = useRef(0);
 
   const days = useMemo(() => {
-    const anchor = parseDateKey(selectedDate);
+    const anchor = new Date();
     const rangeDays = 90; // ~3 months back and forward
     const start = new Date(anchor);
     start.setDate(start.getDate() - rangeDays);
 
-    const result: { key: string; label: string; dayNumber: number }[] = [];
+    const result: DayItem[] = [];
 
     for (let i = 0; i <= rangeDays * 2; i++) {
       const d = new Date(start);
@@ -54,16 +92,19 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
     }
 
     return result;
-  }, [selectedDate]);
+  }, []);
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
+  const selectedIndex = useMemo(
+    () => days.findIndex((d) => d.key === selectedDate),
+    [days, selectedDate],
+  );
 
   useEffect(() => {
-    const layout = dayLayouts[selectedDate];
-    if (!layout) return;
+    if (selectedIndex < 0) return;
 
-    const padding = 10;
-    const targetX = layout.x - padding / 2;
-    const targetWidth = layout.width + padding;
+    const targetX =
+      SIDE_PADDING + selectedIndex * DAY_ITEM_WIDTH - SELECTOR_PADDING / 2;
+    const targetWidth = DAY_ITEM_WIDTH + SELECTOR_PADDING;
 
     selectorX.value = withTiming(targetX, {
       duration: 220,
@@ -74,91 +115,77 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
       easing: Easing.out(Easing.cubic),
     });
 
-    const centerOfDay = layout.x + layout.width / 2;
-    const scrollX = Math.max(0, centerOfDay - SCREEN_WIDTH / 2);
+    // With SIDE_PADDING applied, centering index i means scrollX = i * DAY_TOTAL_WIDTH.
+    const nextScrollX = Math.max(0, selectedIndex * DAY_TOTAL_WIDTH);
 
     calendarStripRef.current?.scrollTo({
-      x: scrollX,
+      x: nextScrollX,
       animated: true,
     });
-  }, [selectedDate, dayLayouts, selectorX, selectorWidth]);
+  }, [selectedIndex, selectorX, selectorWidth]);
 
   const selectorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: selectorX.value }],
     width: selectorWidth.value,
   }));
 
-  return (
-    <View style={styles.calendarStrip}>
-      <ScrollView
-        ref={calendarStripRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToInterval={DAY_TOTAL_WIDTH}
-        snapToAlignment="center"
-        contentContainerStyle={styles.calendarStripContent}
-      >
-        <Animated.View style={[styles.calendarSelector, selectorStyle]} />
-        {days.map((d, index) => {
-          const isSelected = d.key === selectedDate;
-          const isToday = d.key === todayKey;
-          const selectedIndex = days.findIndex(
-            (day) => day.key === selectedDate,
-          );
-          const distanceFromSelected =
-            selectedIndex === -1 ? 0 : Math.abs(index - selectedIndex);
-          const clampedDistance = Math.min(distanceFromSelected, 3);
-          const scale = 1.1 - clampedDistance * 0.06; // small -> big -> small around selected
+  const nudgeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: nudgeX.value }],
+  }));
 
-          return (
-            <Pressable
-              key={d.key}
-              onPress={() => onChangeDate(d.key)}
-              style={styles.dayPressable}
-              onLayout={({ nativeEvent: { layout } }) => {
-                setDayLayouts((prev) => ({
-                  ...prev,
-                  [d.key]: { x: layout.x, width: layout.width },
-                }));
-              }}
-            >
-              <Animated.View
-                layout={Layout.springify()}
-                style={[
-                  styles.day,
-                  {
-                    transform: [{ scale }],
-                  },
-                ]}
-              >
-                <View style={styles.dayTextColumn}>
-                  <Text
-                    style={[
-                      styles.dayNumber,
-                      isSelected && styles.dayNumberSelected,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {d.dayNumber}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dayLabel,
-                      isSelected && styles.dayLabelSelected,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {d.label.toUpperCase()}
-                  </Text>
-                </View>
-                {isToday && <View style={styles.todayDot} />}
-              </Animated.View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-12, 12])
+    .failOffsetY([-18, 18])
+    .onUpdate((event) => {
+      // Small rubber-band nudge; no actual scrolling.
+      const next = event.translationX * 0.18;
+      nudgeX.value = Math.max(-16, Math.min(16, next));
+    })
+    .onFinalize(() => {
+      nudgeX.value = withSpring(0, { damping: 16, stiffness: 260, mass: 0.7 });
+    });
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={[styles.calendarStrip, nudgeStyle]}>
+        <Animated.ScrollView
+          ref={calendarStripRef}
+          horizontal
+          scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.calendarStripContent}
+        >
+          <Animated.View style={[styles.calendarSelector, selectorStyle]} />
+          {days.map((d) => {
+            const isSelected = d.key === selectedDate;
+            const isToday = d.key === todayKey;
+
+            return (
+              <CalendarDayPill
+                key={d.key}
+                d={d}
+                isSelected={isSelected}
+                isToday={isToday}
+                onPress={() => {
+                  if (isSelected) {
+                    const now = Date.now();
+                    const delta = now - lastSelectedTapRef.current;
+                    lastSelectedTapRef.current = now;
+                    if (delta > 0 && delta < 320) {
+                      onChangeDate(todayKey);
+                      return;
+                    }
+                  } else {
+                    lastSelectedTapRef.current = 0;
+                  }
+                  onChangeDate(d.key);
+                }}
+              />
+            );
+          })}
+        </Animated.ScrollView>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -172,12 +199,13 @@ const styles = StyleSheet.create({
     overflow: "visible",
     borderBottomWidth: 1,
     borderBottomColor: Colors.actionButtonStroke,
+    position: "relative",
   },
   calendarStripContent: {
     position: "relative",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 0,
+    paddingHorizontal: SIDE_PADDING,
   },
   calendarSelector: {
     position: "absolute",
@@ -217,9 +245,11 @@ const styles = StyleSheet.create({
   },
   dayNumberSelected: {
     color: Colors.primaryText,
+    fontWeight: "700",
   },
   dayLabelSelected: {
     color: Colors.primaryText,
+    fontWeight: "700",
   },
   dayNumber: {
     fontSize: 14,

@@ -4,6 +4,7 @@ import {
   Alert,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,7 +12,11 @@ import {
 import DraggableFlatList, {
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
-import { Swipeable } from "react-native-gesture-handler";
+import {
+  PanGestureHandler,
+  State,
+  Swipeable,
+} from "react-native-gesture-handler";
 import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { Colors } from "@/constants/Colors";
@@ -26,6 +31,7 @@ type Props = {
   onReorder: (tasks: Task[]) => void;
   onRefreshToToday?: () => void;
   isRefreshing?: boolean;
+  onSwipeEmptyDate?: (direction: "prev" | "next") => void;
 };
 
 const DASH_COUNT = 28;
@@ -39,32 +45,81 @@ export function TaskList({
   onReorder,
   onRefreshToToday,
   isRefreshing,
+  onSwipeEmptyDate,
 }: Props) {
+  const handleSwipeDate = (translationX: number, velocityX: number) => {
+    if (!onSwipeEmptyDate) return;
+    // Reversed mapping:
+    // - swipe right  -> yesterday (prev)
+    // - swipe left   -> next date
+    const swipeLeft = translationX < -50 || velocityX < -650;
+    const swipeRight = translationX > 50 || velocityX > 650;
+
+    if (swipeRight) onSwipeEmptyDate("prev");
+    if (swipeLeft) onSwipeEmptyDate("next");
+  };
+
+  const swipeWrapperProps = {
+    enabled: Boolean(onSwipeEmptyDate),
+    activeOffsetX: [-18, 18] as [number, number],
+    failOffsetY: [-40, 40] as [number, number],
+    onHandlerStateChange: ({ nativeEvent }: any) => {
+      if (nativeEvent.state !== State.END) return;
+      handleSwipeDate(nativeEvent.translationX, nativeEvent.velocityX);
+    },
+  };
+
+  if (tasks.length === 0) {
+    return (
+      <PanGestureHandler {...swipeWrapperProps}>
+        <View style={styles.listContainer}>
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.emptyScrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              onRefreshToToday ? (
+                <RefreshControl
+                  refreshing={Boolean(isRefreshing)}
+                  onRefresh={onRefreshToToday}
+                />
+              ) : undefined
+            }
+          >
+            <View style={styles.emptyListContent}>
+              <Text style={styles.emptyText}>No tasks for this day yet.</Text>
+            </View>
+          </ScrollView>
+        </View>
+      </PanGestureHandler>
+    );
+  }
+
   return (
-    <View style={styles.listContainer}>
-      <DraggableFlatList
-        data={tasks}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        activationDistance={4}
-        contentContainerStyle={
-          tasks.length === 0 ? styles.emptyListContent : { paddingBottom: 24 }
-        }
-        onDragEnd={({ data }) => onReorder(data)}
-        refreshControl={
-          onRefreshToToday ? (
-            <RefreshControl
-              refreshing={Boolean(isRefreshing)}
-              onRefresh={onRefreshToToday}
-            />
-          ) : undefined
-        }
-        renderItem={({
-          item,
-          getIndex,
-          drag,
-          isActive,
-        }: RenderItemParams<Task>) => {
+    <PanGestureHandler {...swipeWrapperProps}>
+      <View style={styles.listContainer}>
+        <DraggableFlatList
+          style={styles.list}
+          data={tasks}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          activationDistance={4}
+          contentContainerStyle={styles.listContent}
+          onDragEnd={({ data }) => onReorder(data)}
+          refreshControl={
+            onRefreshToToday ? (
+              <RefreshControl
+                refreshing={Boolean(isRefreshing)}
+                onRefresh={onRefreshToToday}
+              />
+            ) : undefined
+          }
+          renderItem={({
+            item,
+            getIndex,
+            drag,
+            isActive,
+          }: RenderItemParams<Task>) => {
           let swipeableRef: Swipeable | null = null;
 
           const safeIndex = (() => {
@@ -144,7 +199,6 @@ export function TaskList({
                   <Animated.View
                     style={[
                       styles.taskRow,
-                      item.isDone && styles.taskRowDone,
                     ]}
                   >
                     <Pressable
@@ -190,14 +244,10 @@ export function TaskList({
               </Pressable>
             </Swipeable>
           );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyListContent}>
-            <Text style={styles.emptyText}>No tasks for this day yet.</Text>
-          </View>
-        }
-      />
-    </View>
+          }}
+        />
+      </View>
+    </PanGestureHandler>
   );
 }
 
@@ -205,10 +255,24 @@ const styles = StyleSheet.create({
   listContainer: {
     flex: 1,
   },
-  emptyListContent: {
+  list: {
     flex: 1,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingBottom: 160,
+  },
+  listContent: {
+    paddingBottom: 160,
+  },
+  emptyListContent: {
+    alignItems: "center",
+  },
+  emptyListRoot: {
+    flex: 1,
+    alignSelf: "stretch",
   },
   emptyText: {
     fontSize: 18,
@@ -239,9 +303,6 @@ const styles = StyleSheet.create({
   },
   taskRowActive: {
     transform: [{ scale: 0.98 }],
-  },
-  taskRowDone: {
-    opacity: 0.45,
   },
   taskNumberWrapper: {
     width: 26,
