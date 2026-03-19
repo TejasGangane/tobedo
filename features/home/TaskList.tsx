@@ -1,7 +1,10 @@
 import { FontAwesome } from "@expo/vector-icons";
 import React from "react";
 import {
+  ActionSheetIOS,
   Alert,
+  FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,9 +12,6 @@ import {
   Text,
   View,
 } from "react-native";
-import DraggableFlatList, {
-  type RenderItemParams,
-} from "react-native-draggable-flatlist";
 import {
   PanGestureHandler,
   State,
@@ -20,6 +20,7 @@ import {
 import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { Colors } from "@/constants/Colors";
+import { FadeText } from "@/components/ui/FadeText";
 import type { Task } from "./types";
 
 type Props = {
@@ -32,6 +33,7 @@ type Props = {
   onRefreshToToday?: () => void;
   isRefreshing?: boolean;
   onSwipeEmptyDate?: (direction: "prev" | "next") => void;
+  onEditTask?: (task: Task) => void;
 };
 
 const DASH_COUNT = 28;
@@ -46,7 +48,44 @@ export function TaskList({
   onRefreshToToday,
   isRefreshing,
   onSwipeEmptyDate,
+  onEditTask,
 }: Props) {
+  const showTaskActions = (task: Task) => {
+    if (!onEditTask) return;
+    const title = task.title || "Task";
+
+    if (Platform.OS === "ios") {
+      const options = ["Edit task", "Cancel"];
+      const cancelIndex = 1;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title,
+          options,
+          cancelButtonIndex: cancelIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === cancelIndex) return;
+          if (buttonIndex === 0) onEditTask(task);
+        },
+      );
+      return;
+    }
+
+    // Android and other platforms: simple system alert menu.
+    const buttons = [
+      {
+        text: "Edit task",
+        onPress: () => onEditTask(task),
+      },
+      {
+        text: "Cancel",
+        style: "cancel" as const,
+      },
+    ].filter(Boolean) as { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }[];
+
+    Alert.alert(title, undefined, buttons, { cancelable: true });
+  };
   const handleSwipeDate = (translationX: number, velocityX: number) => {
     if (!onSwipeEmptyDate) return;
     // Reversed mapping:
@@ -87,7 +126,17 @@ export function TaskList({
             }
           >
             <View style={styles.emptyListContent}>
-              <Text style={styles.emptyText}>No tasks for this day yet.</Text>
+              <FadeText
+                inputs={["No tasks for this day yet."]}
+                duration={1100}
+                wordDelay={140}
+                blurTint="extraLight"
+                fontSize={18}
+                fontWeight="500"
+                color={Colors.tertiaryText}
+                containerStyle={styles.emptyFadeContainer}
+                style={styles.emptyText}
+              />
             </View>
           </ScrollView>
         </View>
@@ -98,14 +147,12 @@ export function TaskList({
   return (
     <PanGestureHandler {...swipeWrapperProps}>
       <View style={styles.listContainer}>
-        <DraggableFlatList
+        <FlatList
           style={styles.list}
           data={tasks}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
-          activationDistance={4}
           contentContainerStyle={styles.listContent}
-          onDragEnd={({ data }) => onReorder(data)}
           refreshControl={
             onRefreshToToday ? (
               <RefreshControl
@@ -114,23 +161,10 @@ export function TaskList({
               />
             ) : undefined
           }
-          renderItem={({
-            item,
-            getIndex,
-            drag,
-            isActive,
-          }: RenderItemParams<Task>) => {
+          renderItem={({ item, index }) => {
           let swipeableRef: Swipeable | null = null;
 
-          const safeIndex = (() => {
-            const currentIndex = getIndex?.();
-            if (typeof currentIndex === "number" && currentIndex >= 0) {
-              return currentIndex;
-            }
-            const fromTasks = tasks.findIndex((t) => t.id === item.id);
-            if (fromTasks >= 0) return fromTasks;
-            return 0;
-          })();
+          const safeIndex = typeof index === "number" && index >= 0 ? index : 0;
 
           return (
             <Swipeable
@@ -168,27 +202,12 @@ export function TaskList({
               )}
             >
               <Pressable
-                onLongPress={() => {
-                  Alert.alert(
-                    "Delete task?",
-                    "This will remove the task from your list.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => onDelete(item.id),
-                      },
-                    ],
-                  );
-                }}
-                delayLongPress={400}
                 style={styles.taskRowPressable}
+                onLongPress={() => showTaskActions(item)}
               >
                 <Animated.View
                   style={[
                     styles.taskRowOuter,
-                    isActive && styles.taskRowActive,
                   ]}
                   entering={FadeInDown.delay(safeIndex * 40)}
                   layout={Layout.springify()
@@ -203,6 +222,7 @@ export function TaskList({
                   >
                     <Pressable
                       onPress={() => onToggleDone(item.id)}
+                      onLongPress={() => showTaskActions(item)}
                       style={[
                         styles.taskNumberWrapper,
                         item.isDone && styles.taskNumberDone,
@@ -265,10 +285,14 @@ const styles = StyleSheet.create({
     paddingBottom: 160,
   },
   listContent: {
+    paddingTop: 8,
     paddingBottom: 160,
   },
   emptyListContent: {
     alignItems: "center",
+  },
+  emptyFadeContainer: {
+    paddingHorizontal: 0,
   },
   emptyListRoot: {
     flex: 1,
@@ -286,19 +310,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 20,
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
     marginHorizontal: -10,
     borderRadius: 12,
     backgroundColor: Colors.background,
-    shadowColor: "#000000",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
   taskRowPressable: {
     flex: 1,
-    marginHorizontal: -24,
+    marginHorizontal: 0,
     paddingHorizontal: 24,
   },
   taskRowActive: {
@@ -309,8 +328,9 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: "#E5E7EB",
-    marginLeft: 36,
+    borderColor: Colors.actionButtonStroke,
+    borderStyle: "dashed",
+    marginLeft: 0,
     marginRight: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -337,8 +357,8 @@ const styles = StyleSheet.create({
   },
   dashedSeparatorRow: {
     position: "absolute",
-    left: -24,
-    right: -24,
+    left: 0,
+    right: 0,
     bottom: 0,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -368,13 +388,15 @@ const styles = StyleSheet.create({
   },
   swipePomodoroButton: {
     backgroundColor: Colors.authButtonBg,
-    borderRadius: 0,
     flex: 1,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
   },
   swipeDeleteButton: {
     backgroundColor: "#FEE2E2",
-    borderRadius: 0,
     flex: 1,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
   },
   swipePomodoroText: {
     color: "#FFFFFF",

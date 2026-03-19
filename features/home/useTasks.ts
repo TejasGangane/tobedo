@@ -160,6 +160,21 @@ export function useTasks() {
     setTasks((prev) => [...prev, task]);
   };
 
+  const renameTask = (taskId: string, nextTitle: string) => {
+    const trimmed = nextTitle.trim();
+    if (!trimmed) return;
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              title: trimmed,
+            }
+          : t,
+      ),
+    );
+  };
+
   const reorderTasksForDate = (date: string, orderedIds: string[]) => {
     setTasks((prev) => {
       const currentForDate = prev.filter((t) => t.date === date);
@@ -191,6 +206,7 @@ export function useTasks() {
     completeTask,
     restoreTask,
     reorderTasksForDate,
+    renameTask,
   };
 }
 

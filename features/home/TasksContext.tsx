@@ -16,6 +16,7 @@ type TasksContextValue = {
   completeTask: (taskId: string) => void;
   restoreTask: (task: Task) => void;
   reorderTasksForDate: (date: string, orderedIds: string[]) => void;
+  renameTask: (taskId: string, nextTitle: string) => void;
 };
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);

@@ -1,4 +1,5 @@
 import { ScalePressable } from "@/components/ui/ScalePressable";
+import { FadeText } from "@/components/ui/FadeText";
 import { Colors } from "@/constants/Colors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
@@ -6,7 +7,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AppState,
   BackHandler,
-  Alert,
   InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
@@ -55,6 +55,7 @@ export default function HomeScreen() {
     completeTask,
     restoreTask,
     reorderTasksForDate,
+    renameTask,
   } = useTasksContext();
   const [pomodoro, setPomodoro] = useState<PomodoroState>({ mode: "idle" });
   const [pomodoroMinutes, setPomodoroMinutes] = useState(
@@ -67,6 +68,9 @@ export default function HomeScreen() {
   const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
   const [lastDeletedTask, setLastDeletedTask] = useState<Task | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pillMessage, setPillMessage] = useState<string | null>(null);
+  const [pillIsError, setPillIsError] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const addScale = useSharedValue(0.9);
   const addInputRef = useRef<TextInput | null>(null);
   const headerScale = useSharedValue(1);
@@ -293,7 +297,12 @@ export default function HomeScreen() {
   const startPomodoro = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.isDone) {
-      Alert.alert("Pomodoro unavailable", "This task is already completed.");
+      setPillMessage("Pomodoro already completed for this task");
+      setPillIsError(false);
+      setTimeout(() => {
+        setPillMessage(null);
+        setPillIsError(false);
+      }, 2500);
       return;
     }
 
@@ -381,7 +390,12 @@ export default function HomeScreen() {
   const handleAddTask = () => {
     const title = draftTitle.trim();
     if (!title) return;
-    addTask(title, selectedDate);
+    if (editingTaskId) {
+      renameTask(editingTaskId, title);
+      setEditingTaskId(null);
+    } else {
+      addTask(title, selectedDate);
+    }
     setDraftTitle("");
     setIsAddingTask(false);
   };
@@ -468,11 +482,24 @@ export default function HomeScreen() {
               style={styles.headerRow}
             >
               <View style={styles.weekdayWrapper}>
-                <Animated.Text style={[styles.weekdayText, weekdayBlurStyle]}>
-                  {parseDateKey(displayedDate).toLocaleDateString(undefined, {
-                    weekday: "short",
-                  })}
-                </Animated.Text>
+                <Animated.View style={weekdayBlurStyle}>
+                  <FadeText
+                    inputs={[
+                      parseDateKey(displayedDate).toLocaleDateString(
+                        undefined,
+                        { weekday: "short" },
+                      ),
+                    ]}
+                    duration={900}
+                    wordDelay={0}
+                    blurTint="extraLight"
+                    fontSize={42}
+                    fontWeight="700"
+                    color={Colors.primaryText}
+                    containerStyle={styles.headerFadeContainer}
+                    style={styles.weekdayText}
+                  />
+                </Animated.View>
                 {isSelectedDateToday && <View style={styles.todayDot} />}
               </View>
               <View style={styles.dateTextWrapper}>
@@ -509,6 +536,12 @@ export default function HomeScreen() {
               }
               onRefreshToToday={handleRefreshTasks}
               isRefreshing={isRefreshingTasks}
+              onEditTask={(task) => {
+                setDraftTitle(task.title);
+                setEditingTaskId(task.id);
+                setIsAddingTask(true);
+                setTimeout(focusAddInput, 60);
+              }}
               onSwipeEmptyDate={(direction) => {
                 const d = parseDateKey(selectedDate);
                 d.setDate(d.getDate() + (direction === "next" ? 1 : -1));
@@ -557,54 +590,94 @@ export default function HomeScreen() {
             onMarkCompleted={markPomodoroCompletedNow}
           />
 
-          {lastDeletedTask && (
-            <Animated.View
-              style={styles.undoBar}
-              entering={FadeInDown}
-              layout={Layout.springify()}
-            >
-              <Text style={styles.undoText}>Task deleted</Text>
-              <ScalePressable pressedScale={0.97} onPress={handleUndoDelete}>
-                <Text style={styles.undoAction}>Undo</Text>
-              </ScalePressable>
-            </Animated.View>
-          )}
-
-          <View style={styles.bottomDock} pointerEvents="box-none">
-            {pomodoro.mode === "idle" && totalTasksForSelectedDate > 0 && (
-              <View style={styles.taskStatusPillRow}>
-                <View style={styles.taskStatusPill}>
-                  {(() => {
-                    const done =
-                      totalTasksForSelectedDate - remainingTasksForSelectedDate;
-                    const remaining = remainingTasksForSelectedDate;
-
-                    if (done === 0) {
+          <View style={styles.bottomBar}>
+            {pomodoro.mode === "idle" &&
+              (totalTasksForSelectedDate > 0 || lastDeletedTask || pillMessage) && (
+              <Animated.View
+                style={styles.taskStatusPillRow}
+                entering={FadeInDown.duration(200)}
+                layout={Layout.springify().damping(20).stiffness(260)}
+                exiting={FadeInDown.duration(180)}
+              >
+                <View
+                  style={[
+                    styles.taskStatusPill,
+                    lastDeletedTask && styles.taskStatusPillExpanded,
+                  ]}
+                >
+                  {lastDeletedTask ? (
+                    <>
+                      <FadeText
+                        inputs={["Task deleted. Undo?"]}
+                        duration={700}
+                        wordDelay={0}
+                        blurTint="extraLight"
+                        fontSize={12}
+                        fontWeight="600"
+                        color={Colors.secondaryText}
+                        containerStyle={styles.pillFadeContainer}
+                        style={[styles.taskStatusText, { flex: 1 }]}
+                      />
+                      <ScalePressable
+                        pressedScale={0.97}
+                        onPress={handleUndoDelete}
+                        style={styles.undoInlineButton}
+                      >
+                        <Text style={styles.undoInlineText}>Undo</Text>
+                      </ScalePressable>
+                    </>
+                  ) : pillMessage ? (
+                    <FadeText
+                      inputs={[pillMessage]}
+                      duration={700}
+                      wordDelay={0}
+                      blurTint="extraLight"
+                      fontSize={12}
+                      fontWeight="600"
+                      color={
+                        pillIsError ? Colors.highlightText : Colors.secondaryText
+                      }
+                      containerStyle={styles.pillFadeContainer}
+                      style={[
+                        styles.taskStatusText,
+                        pillIsError && styles.taskStatusTextError,
+                      ]}
+                    />
+                  ) : totalTasksForSelectedDate > 0 ? (
+                    (() => {
+                      const done =
+                        totalTasksForSelectedDate -
+                        remainingTasksForSelectedDate;
+                      const label = `${done}/${totalTasksForSelectedDate} completed`;
                       return (
-                        <Text style={styles.taskStatusText}>
-                          {remaining} remaining
-                        </Text>
+                        <FadeText
+                          inputs={[label]}
+                          duration={700}
+                          wordDelay={0}
+                          blurTint="extraLight"
+                          fontSize={12}
+                          fontWeight="600"
+                          color={Colors.secondaryText}
+                          containerStyle={styles.pillFadeContainer}
+                          style={styles.taskStatusText}
+                        />
                       );
-                    }
-
-                    if (remaining === 0) {
-                      return <Text style={styles.taskStatusText}>{done} done</Text>;
-                    }
-
-                    return (
-                      <>
-                        <Text style={styles.taskStatusText}>
-                          {done}/{totalTasksForSelectedDate} completed
-                        </Text>
-                        <View style={styles.taskStatusDot} />
-                        <Text style={styles.taskStatusText}>
-                          {remaining} remaining
-                        </Text>
-                      </>
-                    );
-                  })()}
+                    })()
+                  ) : (
+                    <FadeText
+                      inputs={["No tasks yet"]}
+                      duration={700}
+                      wordDelay={0}
+                      blurTint="extraLight"
+                      fontSize={12}
+                      fontWeight="600"
+                      color={Colors.secondaryText}
+                      containerStyle={styles.pillFadeContainer}
+                      style={styles.taskStatusText}
+                    />
+                  )}
                 </View>
-              </View>
+              </Animated.View>
             )}
 
             {pomodoro.mode === "idle" && (
@@ -699,6 +772,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 16,
+  },
+  headerFadeContainer: {
+    paddingHorizontal: 0,
   },
   weekdayWrapper: {
     flexDirection: "row",
@@ -892,14 +968,12 @@ const styles = StyleSheet.create({
   },
   taskListWrapper: {
     flex: 1,
-    marginHorizontal: 0,
+    // bleed the list all the way to the screen edges
+    marginHorizontal: -24,
     minHeight: 0,
   },
-  bottomDock: {
-    position: "absolute",
-    left: 24,
-    right: 24,
-    bottom: 0,
+  bottomBar: {
+    alignSelf: "stretch",
   },
   taskStatusPillRow: {
     alignItems: "center",
@@ -909,17 +983,26 @@ const styles = StyleSheet.create({
   taskStatusPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: Colors.actionButtonBg,
     borderWidth: 1,
     borderColor: Colors.actionButtonStroke,
   },
+  pillFadeContainer: {
+    paddingHorizontal: 0,
+  },
+  taskStatusPillExpanded: {
+    alignSelf: "stretch",
+  },
   taskStatusText: {
     fontSize: 12,
     fontWeight: "600",
     color: Colors.secondaryText,
+  },
+  taskStatusTextError: {
+    color: Colors.highlightText,
   },
   taskStatusDot: {
     width: 4,
@@ -927,6 +1010,15 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.tertiaryText,
     marginHorizontal: 10,
+  },
+  undoInlineButton: {
+    marginLeft: 12,
+  },
+  undoInlineText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.primaryText,
+    textAlign: "right",
   },
   addModalBackdrop: {
     flex: 1,

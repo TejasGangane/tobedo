@@ -20,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Colors } from "@/constants/Colors";
+import { FadeText } from "@/components/ui/FadeText";
 
 const ONBOARDED_KEY = "tobedo.onboarded.v1";
 const PRIVACY_POLICY_URL = "https://tejasgangane.github.io/tobedo-privacy-policy/";
@@ -90,11 +91,28 @@ export default function OnboardingScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
       <View style={styles.top}>
-        <Text style={styles.title}>Plan your day.</Text>
-        <Text style={styles.title}>Finish what matters.</Text>
-        <Text style={styles.subtitle}>
-          A clean daily todo list with a calm focus.
-        </Text>
+        <FadeText
+          inputs={["Plan your day.", "Finish what matters."]}
+          duration={1600}
+          wordDelay={180}
+          blurTint="extraLight"
+          fontSize={32}
+          fontWeight="700"
+          color={Colors.primaryText}
+          containerStyle={styles.fadeTitleContainer}
+          style={styles.title}
+        />
+        <FadeText
+          inputs={["A clean daily todo list with a calm focus."]}
+          duration={1400}
+          wordDelay={160}
+          blurTint="extraLight"
+          fontSize={14}
+          fontWeight="400"
+          color={Colors.supportingText}
+          containerStyle={styles.fadeSubtitleContainer}
+          style={styles.subtitle}
+        />
       </View>
 
       <View style={styles.middle}>
@@ -143,6 +161,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 6,
   },
+  fadeTitleContainer: {
+    paddingHorizontal: 0,
+  },
   title: {
     textAlign: "center",
     fontSize: 32,
@@ -157,6 +178,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: Colors.supportingText,
     maxWidth: 320,
+  },
+  fadeSubtitleContainer: {
+    paddingHorizontal: 0,
+    marginTop: 12,
   },
   middle: {
     flex: 1,

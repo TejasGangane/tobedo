@@ -5,13 +5,7 @@
 
 import { renderHook, act } from "@testing-library/react-hooks";
 
-import * as SecureStore from "expo-secure-store";
 import { useTasks } from "../features/home/useTasks";
-
-jest.mock("expo-secure-store", () => ({
-  getItemAsync: jest.fn().mockResolvedValue(null),
-  setItemAsync: jest.fn().mockResolvedValue(undefined),
-}));
 
 describe("useTasks", () => {
   beforeEach(() => {

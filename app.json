@@ -25,8 +25,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.tobedo",
-      "permissions": ["NOTIFICATIONS"]
+      "package": "com.anonymous.tobedo"
     },
     "web": {
       "output": "static",
@@ -47,8 +46,6 @@
           }
         }
       ],
-      "expo-web-browser",
-      "expo-secure-store",
       [
         "expo-build-properties",
         {
