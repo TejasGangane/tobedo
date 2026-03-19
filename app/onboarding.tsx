@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Image,
@@ -8,8 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import Animated, {
   Easing,
   interpolateColor,
@@ -18,9 +17,10 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Colors } from "@/constants/Colors";
 import { FadeText } from "@/components/ui/FadeText";
+import { Colors } from "@/constants/Colors";
 
 const ONBOARDED_KEY = "tobedo.onboarded.v1";
 const PRIVACY_POLICY_URL = "https://tejasgangane.github.io/tobedo-privacy-policy/";
@@ -89,10 +89,10 @@ export default function OnboardingScreen() {
   });
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 36 }]}>
       <View style={styles.top}>
         <FadeText
-          inputs={["Plan your day.", "Finish what matters."]}
+          inputs={["Built for Daily Actions"]}
           duration={1600}
           wordDelay={180}
           blurTint="extraLight"
@@ -101,17 +101,6 @@ export default function OnboardingScreen() {
           color={Colors.primaryText}
           containerStyle={styles.fadeTitleContainer}
           style={styles.title}
-        />
-        <FadeText
-          inputs={["A clean daily todo list with a calm focus."]}
-          duration={1400}
-          wordDelay={160}
-          blurTint="extraLight"
-          fontSize={14}
-          fontWeight="400"
-          color={Colors.supportingText}
-          containerStyle={styles.fadeSubtitleContainer}
-          style={styles.subtitle}
         />
       </View>
 
@@ -187,7 +176,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: 12,
+    paddingTop: 0,
     paddingBottom: 12,
   },
   gif: {

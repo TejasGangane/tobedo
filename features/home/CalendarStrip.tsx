@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import {
   Dimensions,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -72,7 +71,7 @@ export function CalendarStrip({ selectedDate, onChangeDate }: Props) {
   const selectorX = useSharedValue(0);
   const selectorWidth = useSharedValue(DAY_ITEM_WIDTH);
   const nudgeX = useSharedValue(0);
-  const calendarStripRef = useRef<ScrollView | null>(null);
+  const calendarStripRef = useRef<Animated.ScrollView | null>(null);
   const lastSelectedTapRef = useRef(0);
 
   const days = useMemo(() => {

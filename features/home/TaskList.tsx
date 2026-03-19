@@ -1,5 +1,5 @@
 import { FontAwesome } from "@expo/vector-icons";
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ActionSheetIOS,
   Alert,
@@ -17,7 +17,7 @@ import {
   State,
   Swipeable,
 } from "react-native-gesture-handler";
-import Animated, { FadeInDown, Layout } from "react-native-reanimated";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { Colors } from "@/constants/Colors";
 import { FadeText } from "@/components/ui/FadeText";
@@ -28,8 +28,6 @@ type Props = {
   onToggleDone: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onStartPomodoro: (taskId: string) => void;
-  onCancelPomodoro: () => void;
-  onReorder: (tasks: Task[]) => void;
   onRefreshToToday?: () => void;
   isRefreshing?: boolean;
   onSwipeEmptyDate?: (direction: "prev" | "next") => void;
@@ -43,14 +41,12 @@ export function TaskList({
   onToggleDone,
   onDelete,
   onStartPomodoro,
-  onCancelPomodoro,
-  onReorder,
   onRefreshToToday,
   isRefreshing,
   onSwipeEmptyDate,
   onEditTask,
 }: Props) {
-  const showTaskActions = (task: Task) => {
+  const showTaskActions = useCallback((task: Task) => {
     if (!onEditTask) return;
     const title = task.title || "Task";
 
@@ -85,7 +81,7 @@ export function TaskList({
     ].filter(Boolean) as { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }[];
 
     Alert.alert(title, undefined, buttons, { cancelable: true });
-  };
+  }, [onEditTask]);
   const handleSwipeDate = (translationX: number, velocityX: number) => {
     if (!onSwipeEmptyDate) return;
     // Reversed mapping:
@@ -150,7 +146,7 @@ export function TaskList({
         <FlatList
           style={styles.list}
           data={tasks}
-          keyExtractor={(item) => item.id}
+          keyExtractor={useCallback((item: Task) => item.id, [])}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -161,7 +157,7 @@ export function TaskList({
               />
             ) : undefined
           }
-          renderItem={({ item, index }) => {
+          renderItem={useCallback(({ item, index }: { item: Task; index: number }) => {
           let swipeableRef: Swipeable | null = null;
 
           const safeIndex = typeof index === "number" && index >= 0 ? index : 0;
@@ -210,10 +206,6 @@ export function TaskList({
                     styles.taskRowOuter,
                   ]}
                   entering={FadeInDown.delay(safeIndex * 40)}
-                  layout={Layout.springify()
-                    .damping(18)
-                    .stiffness(260)
-                    .mass(0.9)}
                 >
                   <Animated.View
                     style={[
@@ -264,7 +256,7 @@ export function TaskList({
               </Pressable>
             </Swipeable>
           );
-          }}
+          }, [onDelete, onStartPomodoro, onToggleDone, showTaskActions])}
         />
       </View>
     </PanGestureHandler>

@@ -527,13 +527,6 @@ export default function HomeScreen() {
               onToggleDone={handleToggleDone}
               onDelete={handleDeleteTask}
               onStartPomodoro={startPomodoro}
-              onCancelPomodoro={stopPomodoro}
-              onReorder={(orderedTasks: Task[]) =>
-                reorderTasksForDate(
-                  selectedDate,
-                  orderedTasks.map((t: Task) => t.id),
-                )
-              }
               onRefreshToToday={handleRefreshTasks}
               isRefreshing={isRefreshingTasks}
               onEditTask={(task) => {
@@ -595,9 +588,9 @@ export default function HomeScreen() {
               (totalTasksForSelectedDate > 0 || lastDeletedTask || pillMessage) && (
               <Animated.View
                 style={styles.taskStatusPillRow}
-                entering={FadeInDown.duration(200)}
-                layout={Layout.springify().damping(20).stiffness(260)}
-                exiting={FadeInDown.duration(180)}
+                entering={FadeInDown.duration(180)}
+                layout={Layout.springify().damping(32).stiffness(220).mass(1)}
+                exiting={FadeInDown.duration(140)}
               >
                 <View
                   style={[

@@ -74,9 +74,9 @@ export function PrimaryButton({
             <Text
               style={[
                 styles.label,
-                leftIcon && styles.labelWithIcon,
+                leftIcon ? styles.labelWithIcon : undefined,
                 labelStyle,
-              ]}
+              ].filter(Boolean) as TextStyle[]}
             >
               {label}
             </Text>

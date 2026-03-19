@@ -6,6 +6,7 @@
 import { renderHook, act } from "@testing-library/react-hooks";
 
 import { useTasks } from "../features/home/useTasks";
+import type { Task } from "../features/home/types";
 
 describe("useTasks", () => {
   beforeEach(() => {
@@ -25,9 +26,10 @@ describe("useTasks", () => {
       result.current.addTask("Test task", "2025-01-01");
     });
 
-    expect(
-      result.current.tasks.find((t) => t.title === "Test task"),
-    ).toBeTruthy();
+    const found = result.current.tasks.find(
+      (t: Task) => t.title === "Test task",
+    );
+    expect(found).toBeTruthy();
   });
 
   it("toggles task done state", () => {
@@ -39,9 +41,8 @@ describe("useTasks", () => {
       result.current.toggleTaskDone(id!);
     });
 
-    expect(
-      result.current.tasks.find((t) => t.id === id)?.isDone,
-    ).toBeTruthy();
+    const toggled = result.current.tasks.find((t: Task) => t.id === id);
+    expect(toggled?.isDone).toBeTruthy();
   });
 });
 
