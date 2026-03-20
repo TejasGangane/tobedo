@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tobedo",
-    "slug": "tobedo",
+    "name": "Tobedo: To-Do &  Pomodoro",
+    "slug": "tobedo-to-do-and-pomodoro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.tobedo",
+      "bundleIdentifier": "com.anonymous.tobedo.v2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -25,7 +25,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.tobedo"
+      "package": "com.anonymous.tobedo.v2"
     },
     "web": {
       "output": "static",
@@ -62,7 +62,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "396893a7-93de-4f87-b1d0-a17b6f03a8bd"
+        "projectId": "cb872820-fe91-4042-998d-ecff0e8fb112"
       }
     },
     "owner": "app-tobedo"
